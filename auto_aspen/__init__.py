@@ -2,6 +2,9 @@ import os
 import sys
 import time
 import json
+import zipfile
+import tempfile
+import shutil
 from datetime import datetime
 import numpy as np
 import win32com.client as win32
@@ -60,14 +63,102 @@ class PyASPENPlus(object):
         raise Exception(f"无法连接到Aspen Plus COM对象。最后错误: {last_error}")
 
     def load_ap_file(self, file_name: str, file_dir: str = None, visible: bool = False, dialogs: bool = False):
-        """载入待运行的ASPEN文件"""
-        # 文件类型检查.
-        if file_name[-4:] != '.bkp':
-            raise ValueError('not an ASPEN bkp file')
+        """载入待运行的ASPEN文件
+        
+        :param file_name: ASPEN文件名（支持 .bkp 和 .apwz 格式）
+        :param file_dir: 文件目录，默认为当前目录
+        :param visible: 是否显示ASPEN界面，默认为False
+        :param dialogs: 是否显示对话框，默认为False
+        """
+        # 文件类型检查 - 支持 .bkp 和 .apwz 格式
+        file_ext = os.path.splitext(file_name)[1].lower()
+        if file_ext not in ['.bkp', '.apwz']:
+            raise ValueError(f'不支持的文件格式: {file_ext}。仅支持 .bkp 和 .apwz 格式')
         
         self.file_dir = os.getcwd() if file_dir is None else file_dir  # ASPEN文件所处目录, 默认为当前目录
+        full_file_path = os.path.join(self.file_dir, file_name)
 
-        self.app.InitFromArchive2(os.path.join(self.file_dir, file_name))
+        # 根据文件格式选择不同的加载方法
+        if file_ext == '.apwz':
+            # 对于 .apwz 文件，需要先解压
+            logger.info(f'正在处理 .apwz 文件: {file_name}')
+            
+            try:
+                # 创建临时目录来解压文件
+                temp_dir = tempfile.mkdtemp(prefix='aspen_apwz_')
+                logger.debug(f"创建临时目录: {temp_dir}")
+                
+                # 解压 .apwz 文件
+                with zipfile.ZipFile(full_file_path, 'r') as zip_ref:
+                    zip_ref.extractall(temp_dir)
+                    logger.debug(f"文件解压完成到: {temp_dir}")
+                
+                # 查找解压后的 .bkp 文件
+                bkp_file = None
+                # 按优先级查找文件：.apw > .bkp > .backup
+                file_patterns = ['.apw', '.bkp', '.backup']
+                
+                for pattern in file_patterns:
+                    for root, dirs, files in os.walk(temp_dir):
+                        for file in files:
+                            if file.lower().endswith(pattern):
+                                bkp_file = os.path.join(root, file)
+                                logger.debug(f"找到 {pattern} 文件: {bkp_file}")
+                                break
+                        if bkp_file:
+                            break
+                    if bkp_file:
+                        break
+                
+                if not bkp_file:
+                    # 如果没有找到 .bkp 文件，列出所有文件
+                    all_files = []
+                    for root, dirs, files in os.walk(temp_dir):
+                        for file in files:
+                            all_files.append(os.path.join(root, file))
+                    
+                    logger.debug(f"解压后的文件列表: {all_files}")
+                    raise Exception(f"在 .apwz 文件中未找到 .bkp 文件。解压后的文件: {all_files}")
+                
+                # 使用找到的文件加载
+                logger.info(f"使用解压后的文件: {os.path.basename(bkp_file)}")
+                
+                # 根据文件扩展名选择加载方法
+                file_ext_found = os.path.splitext(bkp_file)[1].lower()
+                if file_ext_found == '.apw':
+                    # 对于 .apw 文件，尝试使用 InitFromTemplate2 或 Open
+                    try:
+                        logger.debug("尝试使用 InitFromTemplate2 加载 .apw 文件")
+                        self.app.InitFromTemplate2(bkp_file)
+                    except Exception as e1:
+                        logger.debug(f"InitFromTemplate2 失败: {str(e1)}")
+                        try:
+                            logger.debug("尝试使用 InitFromArchive2 加载 .apw 文件")
+                            self.app.InitFromArchive2(bkp_file)
+                        except Exception as e2:
+                            logger.debug(f"InitFromArchive2 失败: {str(e2)}")
+                            raise Exception(f"无法加载 .apw 文件: InitFromTemplate2: {str(e1)}, InitFromArchive2: {str(e2)}")
+                else:
+                    # 对于 .bkp 和 .backup 文件，使用 InitFromArchive2
+                    self.app.InitFromArchive2(bkp_file)
+                
+                # 保存临时目录路径，以便后续清理
+                self._temp_dir = temp_dir
+                
+            except Exception as e:
+                # 清理临时目录
+                if 'temp_dir' in locals() and os.path.exists(temp_dir):
+                    try:
+                        shutil.rmtree(temp_dir)
+                        logger.debug(f"清理临时目录: {temp_dir}")
+                    except:
+                        pass
+                raise Exception(f"处理 .apwz 文件失败: {str(e)}")
+        else:
+            # 对于 .bkp 文件，使用原有的方法
+            logger.info(f'正在加载 .bkp 文件: {file_name}')
+            self.app.InitFromArchive2(full_file_path)
+        
         self.app.Visible = 1 if visible else 0
         self.app.SuppressDialogs = 0 if dialogs else 1
 
@@ -303,58 +394,148 @@ class PyASPENPlus(object):
         return properties
 
     def _get_block_properties(self, block_name: str, auto_discover: bool = True) -> dict:
-        """获取设备块属性"""
-        properties = {"name": block_name}
+        """获取设备块的属性信息"""
+        properties = {}
         
-        # 获取设备类型
         try:
-            type_node = self.app.Tree.FindNode(f"\\Data\\Blocks\\{block_name}\\Input\\TYPE")
-            if type_node and type_node.Value is not None:
-                properties["type"] = str(type_node.Value)
-        except:
-            pass
-        
-        if auto_discover:
-            # 尝试获取更多属性
-            common_block_props = {
-                "DUTY": {"unit": "MMBtu/hr", "name": "duty"},
-                "DELPMAX": {"unit": "bar", "name": "pressure_drop"},
-                "VFRAC": {"unit": "", "name": "vapor_fraction"},
-                "TEMP": {"unit": "°C", "name": "temperature"}
-            }
+            # 特殊处理 EXPANDER 设备块
+            if block_name.upper() == 'EXPANDER':
+                logger.debug(f"获取 EXPANDER 设备块的详细结果")
+                
+                # EXPANDER 设备块的关键输出参数（基于实际探索发现的路径）
+                expander_params = {
+                    "indicated_power": {"path": "\\Data\\Blocks\\EXPANDER\\Output\\IND_POWER", "unit": "kW", "name": "指示马力"},
+                    "brake_power": {"path": "\\Data\\Blocks\\EXPANDER\\Output\\BRAKE_POWER", "unit": "kW", "name": "制动马力"},
+                    "net_power_required": {"path": "\\Data\\Blocks\\EXPANDER\\Output\\WNET", "unit": "kW", "name": "净功要求"},
+                    "power_loss": {"path": "\\Data\\Blocks\\EXPANDER\\Output\\POWER_LOSS", "unit": "kW", "name": "功率损耗"},
+                    "efficiency": {"path": "\\Data\\Blocks\\EXPANDER\\Output\\EFF_ISEN", "unit": "", "name": "效率"},
+                    "mechanical_efficiency": {"path": "\\Data\\Blocks\\EXPANDER\\Output\\EFF_MECH", "unit": "", "name": "机械效率"},
+                    "outlet_pressure": {"path": "\\Data\\Blocks\\EXPANDER\\Output\\POC", "unit": "bar", "name": "出口压力"},
+                    "outlet_temperature": {"path": "\\Data\\Blocks\\EXPANDER\\Output\\TOC", "unit": "°C", "name": "出口温度"},
+                    "isentropic_outlet_temp": {"path": "\\Data\\Blocks\\EXPANDER\\Output\\TOS", "unit": "°C", "name": "等熵出口温度"},
+                    "vapor_fraction": {"path": "\\Data\\Blocks\\EXPANDER\\Output\\B_VFRAC", "unit": "", "name": "汽相分率"},
+                    "compression_model": {"path": "\\Data\\Blocks\\EXPANDER\\Input\\TYPE", "unit": "", "name": "压缩机模型"},
+                    "inlet_pressure": {"path": "\\Data\\Blocks\\EXPANDER\\Output\\IN_PRES", "unit": "bar", "name": "入口压力"},
+                    "pressure_ratio": {"path": "\\Data\\Blocks\\EXPANDER\\Output\\PRES_RATIO", "unit": "", "name": "压力比"},
+                    "isentropic_power": {"path": "\\Data\\Blocks\\EXPANDER\\Output\\POWER_ISEN", "unit": "kW", "name": "等熵功率"}
+                }
+                
+                # 尝试获取每个参数
+                for param_key, param_info in expander_params.items():
+                    try:
+                        node = self.app.Tree.FindNode(param_info["path"])
+                        if node and node.Value is not None:
+                            try:
+                                # 尝试转换为数值
+                                value = float(node.Value)
+                                properties[param_info["name"]] = {
+                                    "value": value,
+                                    "unit": param_info["unit"],
+                                    "path": param_info["path"],
+                                    "key": param_key
+                                }
+                                logger.debug(f"获取到 {param_info['name']}: {value} {param_info['unit']}")
+                            except (ValueError, TypeError):
+                                # 如果不能转换为数值，保存为字符串
+                                value = str(node.Value)
+                                properties[param_info["name"]] = {
+                                    "value": value,
+                                    "unit": param_info["unit"],
+                                    "path": param_info["path"],
+                                    "key": param_key
+                                }
+                                logger.debug(f"获取到 {param_info['name']}: {value}")
+                    except Exception as e:
+                        logger.debug(f"获取 {param_info['name']} 失败: {str(e)}")
+                        # 尝试其他可能的路径
+                        alternative_paths = [
+                            param_info["path"].replace("\\Output\\", "\\Results\\"),
+                            param_info["path"].replace("\\Output\\", "\\Input\\"),
+                            param_info["path"] + "\\MIXED"
+                        ]
+                        
+                        for alt_path in alternative_paths:
+                            try:
+                                alt_node = self.app.Tree.FindNode(alt_path)
+                                if alt_node and alt_node.Value is not None:
+                                    try:
+                                        value = float(alt_node.Value)
+                                        properties[param_info["name"]] = {
+                                            "value": value,
+                                            "unit": param_info["unit"],
+                                            "path": alt_path,
+                                            "key": param_key
+                                        }
+                                        logger.debug(f"通过备用路径获取到 {param_info['name']}: {value} {param_info['unit']}")
+                                        break
+                                    except (ValueError, TypeError):
+                                        value = str(alt_node.Value)
+                                        properties[param_info["name"]] = {
+                                            "value": value,
+                                            "unit": param_info["unit"],
+                                            "path": alt_path,
+                                            "key": param_key
+                                        }
+                                        logger.debug(f"通过备用路径获取到 {param_info['name']}: {value}")
+                                        break
+                            except:
+                                continue
             
-            for prop_key, prop_info in common_block_props.items():
-                try:
-                    # 尝试不同的路径
-                    possible_paths = [
-                        f"\\Data\\Blocks\\{block_name}\\Output\\{prop_key}",
-                        f"\\Data\\Blocks\\{block_name}\\Results\\{prop_key}",
-                        f"\\Data\\Blocks\\{block_name}\\Input\\{prop_key}"
-                    ]
-                    
-                    for path in possible_paths:
-                        try:
-                            node = self.app.Tree.FindNode(path)
-                            if node and node.Value is not None:
-                                try:
-                                    value = float(node.Value)
-                                    properties[prop_info["name"]] = {
-                                        "value": value,
-                                        "unit": prop_info["unit"],
-                                        "path": path
-                                    }
-                                    break
-                                except (ValueError, TypeError):
-                                    properties[prop_info["name"]] = {
-                                        "value": str(node.Value),
-                                        "unit": prop_info["unit"],
-                                        "path": path
-                                    }
-                                    break
-                        except:
-                            continue
-                except Exception as e:
-                    logger.debug(f"获取 {block_name} 的 {prop_key} 失败: {str(e)}")
+            # 通用设备块属性获取（保留原有逻辑作为备用）
+            if auto_discover and len(properties) < 5:  # 如果专用方法获取的参数太少，使用通用方法补充
+                logger.debug(f"使用通用方法补充 {block_name} 的属性")
+                
+                # 常见的设备块输出属性
+                common_block_props = {
+                    "WNET": {"unit": "kW", "name": "net_work"},
+                    "POWER": {"unit": "kW", "name": "power"},
+                    "QNET": {"unit": "kW", "name": "heat_duty"},
+                    "PRES": {"unit": "bar", "name": "pressure"},
+                    "TEMP": {"unit": "°C", "name": "temperature"},
+                    "EFF": {"unit": "", "name": "efficiency"},
+                    "DELPMAX": {"unit": "bar", "name": "pressure_drop"},
+                    "VFRAC": {"unit": "", "name": "vapor_fraction"}
+                }
+                
+                for prop_key, prop_info in common_block_props.items():
+                    # 跳过已经获取的属性
+                    if any(prop_info["name"] in existing_prop.get("key", "") for existing_prop in properties.values()):
+                        continue
+                        
+                    try:
+                        # 尝试不同的路径
+                        possible_paths = [
+                            f"\\Data\\Blocks\\{block_name}\\Output\\{prop_key}",
+                            f"\\Data\\Blocks\\{block_name}\\Results\\{prop_key}",
+                            f"\\Data\\Blocks\\{block_name}\\Input\\{prop_key}"
+                        ]
+                        
+                        for path in possible_paths:
+                            try:
+                                node = self.app.Tree.FindNode(path)
+                                if node and node.Value is not None:
+                                    try:
+                                        value = float(node.Value)
+                                        properties[f"通用_{prop_info['name']}"] = {
+                                            "value": value,
+                                            "unit": prop_info["unit"],
+                                            "path": path
+                                        }
+                                        break
+                                    except (ValueError, TypeError):
+                                        properties[f"通用_{prop_info['name']}"] = {
+                                            "value": str(node.Value),
+                                            "unit": prop_info["unit"],
+                                            "path": path
+                                        }
+                                        break
+                            except:
+                                continue
+                    except Exception as e:
+                        logger.debug(f"获取 {block_name} 的 {prop_key} 失败: {str(e)}")
+        
+        except Exception as e:
+            logger.error(f"获取设备块 {block_name} 属性时发生错误: {str(e)}")
         
         return properties
 
@@ -398,6 +579,14 @@ class PyASPENPlus(object):
                     logger.debug("COM对象引用已释放")
                 except:
                     pass
+            
+            # 清理临时目录（如果存在）
+            if hasattr(self, '_temp_dir') and self._temp_dir and os.path.exists(self._temp_dir):
+                try:
+                    shutil.rmtree(self._temp_dir)
+                    logger.debug(f"清理临时目录: {self._temp_dir}")
+                except Exception as e:
+                    logger.debug(f"清理临时目录失败: {str(e)}")
                     
         except Exception as e:
             # 在析构函数中不要抛出异常，只记录日志
