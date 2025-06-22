@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASPEN 综合仿真计算平台</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: 
+                radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.3) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(255, 119, 198, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(120, 219, 255, 0.2) 0%, transparent 50%),
+                linear-gradient(135deg, #0f0f23 0%, #1a1a2e 25%, #16213e 50%, #0f0f23 100%);
+            color: #e2e8f0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .container {
+            display: flex;
+            min-height: 100vh;
+            position: relative;
+        }
+
+        /* 背景装饰 */
+        .bg-decoration {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .floating-orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(1px);
+            animation: float 6s ease-in-out infinite;
+        }
+
+        .orb-1 {
+            top: 10%;
+            left: 10%;
+            width: 100px;
+            height: 100px;
+            background: radial-gradient(circle, rgba(120, 119, 198, 0.4) 0%, transparent 70%);
+            animation-delay: 0s;
+        }
+
+        .orb-2 {
+            top: 60%;
+            right: 15%;
+            width: 150px;
+            height: 150px;
+            background: radial-gradient(circle, rgba(255, 119, 198, 0.3) 0%, transparent 70%);
+            animation-delay: 2s;
+        }
+
+        .orb-3 {
+            bottom: 20%;
+            left: 30%;
+            width: 80px;
+            height: 80px;
+            background: radial-gradient(circle, rgba(120, 219, 255, 0.4) 0%, transparent 70%);
+            animation-delay: 4s;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) rotate(0deg); }
+            33% { transform: translate(30px, -30px) rotate(120deg); }
+            66% { transform: translate(-20px, 20px) rotate(240deg); }
+        }
+
+        /* 左侧输入面板 */
+        .input-panel {
+            flex: 0 0 35%;
+            padding: 2.5rem 1.8rem;
+            background: rgba(15, 15, 35, 0.85);
+            backdrop-filter: blur(20px);
+            border-right: 2px solid rgba(120, 119, 198, 0.3);
+            overflow-y: auto;
+            box-shadow: 4px 0 30px rgba(120, 119, 198, 0.2);
+        }
+
+        .panel-header {
+            text-align: center;
+            margin-bottom: 2.5rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid rgba(0, 212, 255, 0.2);
+        }
+
+        .panel-title {
+            font-size: 2.2rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #7877c6 0%, #ff77c6 50%, #78dbff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.8rem;
+            text-shadow: 0 0 30px rgba(120, 119, 198, 0.3);
+        }
+
+        .panel-subtitle {
+            color: #94a3b8;
+            font-size: 1rem;
+            font-weight: 400;
+            opacity: 0.9;
+        }
+
+        /* Tab样式 */
+        .tab-container {
+            margin-bottom: 2rem;
+        }
+
+        .tab-nav {
+            display: flex;
+            background: rgba(15, 15, 35, 0.6);
+            border-radius: 12px;
+            padding: 0.5rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid rgba(120, 119, 198, 0.2);
+        }
+
+        .tab-button {
+            flex: 1;
+            padding: 1rem 1.5rem;
+            background: transparent;
+            border: none;
+            color: #94a3b8;
+            font-size: 0.9rem;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            position: relative;
+        }
+
+        .tab-button.active {
+            background: linear-gradient(135deg, rgba(120, 119, 198, 0.3), rgba(255, 119, 198, 0.2));
+            color: #ffffff;
+            box-shadow: 0 4px 15px rgba(120, 119, 198, 0.3);
+        }
+
+        .tab-button:hover:not(.active) {
+            background: rgba(120, 119, 198, 0.1);
+            color: #e2e8f0;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+            animation: fadeIn 0.3s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* 表单样式 */
+        .form-section {
+            background: rgba(26, 35, 50, 0.4);
+            border: 1px solid rgba(120, 119, 198, 0.25);
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            transition: all 0.4s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .form-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #7877c6, transparent);
+            transition: all 0.4s ease;
+        }
+
+        .form-section:hover {
+            border-color: rgba(120, 119, 198, 0.5);
+            box-shadow: 0 8px 32px rgba(120, 119, 198, 0.15);
+            transform: translateY(-2px);
+        }
+
+        .form-section:hover::before {
+            left: 0;
+        }
+
+        .section-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #7877c6;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .section-title::before {
+            content: '';
+            width: 6px;
+            height: 24px;
+            background: linear-gradient(to bottom, #7877c6, #ff77c6);
+            margin-right: 12px;
+            border-radius: 3px;
+            box-shadow: 0 0 10px rgba(120, 119, 198, 0.5);
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 0.8rem;
+            font-size: 0.95rem;
+            color: #cbd5e1;
+            font-weight: 600;
+            position: relative;
+        }
+
+        .unit-info {
+            font-size: 0.8rem;
+            color: #64748b;
+            font-weight: 400;
+            margin-left: 0.5rem;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 1rem;
+            background: rgba(15, 15, 35, 0.7);
+            border: 2px solid rgba(120, 119, 198, 0.3);
+            border-radius: 12px;
+            color: #e2e8f0;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #7877c6;
+            box-shadow: 0 0 0 3px rgba(120, 119, 198, 0.2), 0 0 20px rgba(120, 119, 198, 0.1);
+            background: rgba(15, 15, 35, 0.9);
+            transform: scale(1.02);
+        }
+
+        .gas-composition {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+        }
+
+        .submit-btn {
+            width: 100%;
+            padding: 1.2rem;
+            background: linear-gradient(135deg, #7877c6 0%, #ff77c6 50%, #78dbff 100%);
+            border: none;
+            border-radius: 16px;
+            color: white;
+            font-size: 1.1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.4s ease;
+            position: relative;
+            overflow: hidden;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 4px 20px rgba(120, 119, 198, 0.3);
+        }
+
+        .submit-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: all 0.4s ease;
+        }
+
+        .submit-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 40px rgba(120, 119, 198, 0.4);
+        }
+
+        .submit-btn:hover::before {
+            left: 100%;
+        }
+
+        .submit-btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .submit-btn.loading::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            animation: loading-sweep 2s infinite;
+        }
+
+        @keyframes loading-sweep {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
+
+        /* 右侧结果面板 */
+        .result-panel {
+            flex: 1;
+            padding: 2.5rem;
+            background: rgba(15, 20, 25, 0.6);
+            overflow-y: auto;
+        }
+
+        .result-header {
+            text-align: center;
+            margin-bottom: 2.5rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid rgba(120, 219, 255, 0.3);
+        }
+
+        .result-title {
+            font-size: 2rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #78dbff 0%, #7877c6 50%, #ff77c6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.8rem;
+            text-shadow: 0 0 30px rgba(120, 219, 255, 0.3);
+        }
+
+        .result-card {
+            background: rgba(26, 35, 50, 0.5);
+            border: 1px solid rgba(120, 219, 255, 0.25);
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            transition: all 0.4s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .result-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #78dbff, transparent);
+            transition: all 0.4s ease;
+        }
+
+        .result-card:hover {
+            border-color: rgba(120, 219, 255, 0.5);
+            box-shadow: 0 8px 32px rgba(120, 219, 255, 0.15);
+            transform: translateY(-2px);
+        }
+
+        .result-card:hover::before {
+            left: 0;
+        }
+
+        .card-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #78dbff;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .card-title::before {
+            content: '';
+            width: 6px;
+            height: 24px;
+            background: linear-gradient(to bottom, #78dbff, #7877c6);
+            margin-right: 12px;
+            border-radius: 3px;
+            box-shadow: 0 0 10px rgba(120, 219, 255, 0.5);
+        }
+
+        .result-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1.2rem;
+        }
+
+        .result-item {
+            background: rgba(15, 15, 35, 0.7);
+            padding: 1.5rem;
+            border-radius: 12px;
+            border-left: 4px solid #78dbff;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .result-item:hover {
+            transform: translateX(5px);
+            box-shadow: 0 4px 20px rgba(120, 219, 255, 0.1);
+        }
+
+        .result-label {
+            font-size: 0.85rem;
+            color: #94a3b8;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .result-value {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #e2e8f0;
+        }
+
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.4rem 1rem;
+            border-radius: 25px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-success {
+            background: rgba(120, 219, 255, 0.2);
+            color: #78dbff;
+            border: 2px solid rgba(120, 219, 255, 0.4);
+            box-shadow: 0 0 15px rgba(120, 219, 255, 0.2);
+        }
+
+        .status-error {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border: 2px solid rgba(239, 68, 68, 0.4);
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.2);
+        }
+
+        .status-indicator::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 0.8rem;
+            animation: pulse 2s infinite;
+        }
+
+        .status-success::before {
+            background: #78dbff;
+        }
+
+        .status-error::before {
+            background: #ef4444;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* 加载动画 */
+        .loading-spinner {
+            display: none;
+            justify-content: center;
+            align-items: center;
+            height: 300px;
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(120, 119, 198, 0.2);
+            border-top: 4px solid #7877c6;
+            border-radius: 50%;
+            animation: spin 1.2s linear infinite;
+            box-shadow: 0 0 20px rgba(120, 119, 198, 0.3);
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* 空状态 */
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: #64748b;
+        }
+
+        .empty-icon {
+            font-size: 4rem;
+            margin-bottom: 1.5rem;
+            opacity: 0.7;
+        }
+
+        .empty-state h3 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: #94a3b8;
+        }
+
+        .empty-state p {
+            font-size: 1rem;
+            line-height: 1.6;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 1024px) {
+            .input-panel {
+                flex: 0 0 40%;
+            }
+            
+            .result-grid {
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+            }
+            
+            .input-panel {
+                flex: none;
+                border-right: none;
+                border-bottom: 2px solid rgba(0, 212, 255, 0.3);
+                padding: 2rem 1.5rem;
+            }
+
+            .result-panel {
+                padding: 2rem 1.5rem;
+            }
+
+            .gas-composition {
+                grid-template-columns: 1fr;
+            }
+
+            .result-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .panel-title {
+                font-size: 1.8rem;
+            }
+
+            .result-title {
+                font-size: 1.6rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .input-panel, .result-panel {
+                padding: 1.5rem 1rem;
+            }
+
+            .form-section, .result-card {
+                padding: 1.5rem;
+            }
+
+            .panel-title {
+                font-size: 1.5rem;
+            }
+
+            .result-title {
+                font-size: 1.4rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 背景装饰 -->
+    <div class="bg-decoration">
+        <div class="floating-orb orb-1"></div>
+        <div class="floating-orb orb-2"></div>
+        <div class="floating-orb orb-3"></div>
+    </div>
+
+    <div class="container">
+        <!-- 左侧输入面板 -->
+        <div class="input-panel">
+            <div class="panel-header">
+                <h1 class="panel-title">ASPEN 仿真计算</h1>
+                <p class="panel-subtitle">气体膨胀机综合仿真与机组选型平台</p>
+            </div>
+
+            <form id="simulationForm">
+                <!-- Tab导航 -->
+                <div class="tab-container">
+                    <div class="tab-nav">
+                        <button type="button" class="tab-button active" data-tab="basic">
+                            🚀 基础参数
+                        </button>
+                        <button type="button" class="tab-button" data-tab="pressure">
+                            🌡️ 压力温度
+                        </button>
+                        <button type="button" class="tab-button" data-tab="composition">
+                            ⚗️ 气体组成
+                        </button>
+                    </div>
+
+                    <!-- 基础参数 Tab -->
+                    <div class="tab-content active" id="basic-tab">
+                        <div class="form-section">
+                            <h3 class="section-title">基础参数</h3>
+                            
+                            <div class="form-group">
+                                <label class="form-label" for="gasFlowRate">
+                                    气体流量 <span class="unit-info">(Nm³/day, 24 Nm³/day = 1 scmh)</span>
+                                </label>
+                                <input type="number" id="gasFlowRate" name="gas_flow_rate" class="form-input" 
+                                       value="800000" step="1000" required>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="efficiency">
+                                    设备效率 <span class="unit-info">(%)</span>
+                                </label>
+                                <input type="number" id="efficiency" name="efficiency" class="form-input" 
+                                       value="85" min="0" max="100" step="0.1" required>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 压力温度参数 Tab -->
+                    <div class="tab-content" id="pressure-tab">
+                        <div class="form-section">
+                            <h3 class="section-title">压力温度参数</h3>
+                            
+                            <div class="form-group">
+                                <label class="form-label" for="inletPressure">
+                                    入口压力 <span class="unit-info">(MPaA)</span>
+                                </label>
+                                <input type="number" id="inletPressure" name="inlet_pressure" class="form-input" 
+                                       value="0.80" step="0.01" min="0" required>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="outletPressure">
+                                    出口压力 <span class="unit-info">(MPaA)</span>
+                                </label>
+                                <input type="number" id="outletPressure" name="outlet_pressure" class="form-input" 
+                                       value="0.30" step="0.01" min="0" required>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="inletTemperature">
+                                    入口温度 <span class="unit-info">(°C)</span>
+                                </label>
+                                <input type="number" id="inletTemperature" name="inlet_temperature" class="form-input" 
+                                       value="20.0" step="0.1" required>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 气体组成 Tab -->
+                    <div class="tab-content" id="composition-tab">
+                        <div class="form-section">
+                            <h3 class="section-title">气体组成 <span class="unit-info">(%)</span></h3>
+                            
+                            <div class="gas-composition">
+                                <div class="form-group">
+                                    <label class="form-label" for="ch4">CH₄ (甲烷)</label>
+                                    <input type="number" id="ch4" name="CH4" class="form-input" 
+                                           value="100" min="0" max="100" step="0.1" required>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="form-label" for="c2h6">C₂H₆ (乙烷)</label>
+                                    <input type="number" id="c2h6" name="C2H6" class="form-input" 
+                                           value="0" min="0" max="100" step="0.1" required>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="form-label" for="c3h8">C₃H₈ (丙烷)</label>
+                                    <input type="number" id="c3h8" name="C3H8" class="form-input" 
+                                           value="0" min="0" max="100" step="0.1" required>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="form-label" for="c4h10">C₄H₁₀ (丁烷)</label>
+                                    <input type="number" id="c4h10" name="C4H10" class="form-input" 
+                                           value="0" min="0" max="100" step="0.1" required>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="form-label" for="n2">N₂ (氮气)</label>
+                                    <input type="number" id="n2" name="N2" class="form-input" 
+                                           value="0" min="0" max="100" step="0.1" required>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="form-label" for="co2">CO₂ (二氧化碳)</label>
+                                    <input type="number" id="co2" name="CO2" class="form-input" 
+                                           value="0" min="0" max="100" step="0.1" required>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="form-label" for="h2s">H₂S (硫化氢)</label>
+                                    <input type="number" id="h2s" name="H2S" class="form-input" 
+                                           value="0" min="0" max="100" step="0.1" required>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit" class="submit-btn" id="submitBtn">
+                    <span id="btnText">开始仿真计算</span>
+                </button>
+            </form>
+        </div>
+
+        <!-- 右侧结果面板 -->
+        <div class="result-panel">
+            <div class="result-header">
+                <h2 class="result-title">仿真结果</h2>
+                <p class="panel-subtitle">ASPEN仿真与机组选型综合结果</p>
+            </div>
+
+            <!-- 空状态 -->
+            <div id="emptyState" class="empty-state">
+                <div class="empty-icon">🚀</div>
+                <h3>等待仿真计算</h3>
+                <p>请在左侧输入工艺参数并点击"开始仿真计算"<br>系统将自动运行ASPEN仿真并进行机组选型</p>
+            </div>
+
+            <!-- 加载状态 -->
+            <div id="loadingState" class="loading-spinner">
+                <div class="spinner"></div>
+            </div>
+
+            <!-- 结果展示 -->
+            <div id="resultContent" style="display: none;">
+                <!-- 仿真概况 -->
+                <div class="result-card">
+                    <h3 class="card-title">仿真概况</h3>
+                    <div class="result-grid">
+                        <div class="result-item">
+                            <div class="result-label">总体状态</div>
+                            <div class="result-value" id="overallStatus">
+                                <span class="status-indicator status-success">成功</span>
+                            </div>
+                        </div>
+                        <div class="result-item">
+                            <div class="result-label">ASPEN仿真</div>
+                            <div class="result-value" id="aspenStatus">等待中</div>
+                        </div>
+                        <div class="result-item">
+                            <div class="result-label">功率计算</div>
+                            <div class="result-value" id="powerStatus">等待中</div>
+                        </div>
+                        <div class="result-item">
+                            <div class="result-label">仿真时间</div>
+                            <div class="result-value" id="simulationTime">计算中</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ASPEN仿真结果 -->
+                <div class="result-card">
+                    <h3 class="card-title">ASPEN仿真结果</h3>
+                    <div class="result-grid">
+                        <div class="result-item">
+                            <div class="result-label">功率输出</div>
+                            <div class="result-value" id="powerOutput">计算中</div>
+                        </div>
+                        <div class="result-item">
+                            <div class="result-label">入口条件</div>
+                            <div class="result-value" id="inletConditions">分析中</div>
+                        </div>
+                        <div class="result-item">
+                            <div class="result-label">出口条件</div>
+                            <div class="result-value" id="outletConditions">分析中</div>
+                        </div>
+                        <div class="result-item">
+                            <div class="result-label">性能指标</div>
+                            <div class="result-value" id="performanceMetrics">评估中</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 机组选型结果 -->
+                <div class="result-card">
+                    <h3 class="card-title">机组选型结果</h3>
+                    <div id="unitSelectionGrid" class="result-grid">
+                        <!-- 动态生成 -->
+                    </div>
+                </div>
+
+                <!-- 经济性分析 -->
+                <div class="result-card">
+                    <h3 class="card-title">经济性分析</h3>
+                    <div id="economicGrid" class="result-grid">
+                        <!-- 动态生成 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Tab切换功能
+        function initTabs() {
+            const tabButtons = document.querySelectorAll('.tab-button');
+            const tabContents = document.querySelectorAll('.tab-content');
+
+            tabButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    // 移除所有active类
+                    tabButtons.forEach(btn => btn.classList.remove('active'));
+                    tabContents.forEach(content => content.classList.remove('active'));
+
+                    // 添加active类到当前按钮
+                    button.classList.add('active');
+
+                    // 显示对应的内容
+                    const tabId = button.getAttribute('data-tab') + '-tab';
+                    document.getElementById(tabId).classList.add('active');
+                });
+            });
+        }
+
+        // 初始化Tab功能
+        document.addEventListener('DOMContentLoaded', initTabs);
+
+        // 表单提交处理
+        document.getElementById('simulationForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const data = {};
+            
+            // 基础参数 - 将Nm³/day转换为scmh (24 Nm³/day = 1 scmh)
+            const gasFlowRateNm3Day = parseFloat(formData.get('gas_flow_rate'));
+            data.gas_flow_rate = gasFlowRateNm3Day / 24; // 转换为scmh
+            
+            data.inlet_pressure = parseFloat(formData.get('inlet_pressure'));
+            data.inlet_temperature = parseFloat(formData.get('inlet_temperature'));
+            data.outlet_pressure = parseFloat(formData.get('outlet_pressure'));
+            data.efficiency = parseFloat(formData.get('efficiency'));
+            
+            // 气体组成
+            data.gas_composition = {
+                CH4: parseFloat(formData.get('CH4')),
+                C2H6: parseFloat(formData.get('C2H6')),
+                C3H8: parseFloat(formData.get('C3H8')),
+                C4H10: parseFloat(formData.get('C4H10')),
+                N2: parseFloat(formData.get('N2')),
+                CO2: parseFloat(formData.get('CO2')),
+                H2S: parseFloat(formData.get('H2S'))
+            };
+
+            // 验证气体组成总和
+            const totalComposition = Object.values(data.gas_composition).reduce((sum, val) => sum + val, 0);
+            if (Math.abs(totalComposition - 100) > 0.1) {
+                alert(`气体组成总和应为100%，当前为：${totalComposition.toFixed(1)}%\n请调整各组分的百分比。`);
+                return;
+            }
+
+            // 显示加载状态
+            showLoading();
+
+            try {
+                const response = await fetch('/api/simulation', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    displayResults(result);
+                } else {
+                    displayError(result.error_message || '仿真计算失败');
+                }
+            } catch (error) {
+                displayError('网络请求失败：' + error.message);
+            }
+        });
+
+        function showLoading() {
+            document.getElementById('emptyState').style.display = 'none';
+            document.getElementById('resultContent').style.display = 'none';
+            document.getElementById('loadingState').style.display = 'flex';
+            
+            const submitBtn = document.getElementById('submitBtn');
+            const btnText = document.getElementById('btnText');
+            
+            submitBtn.disabled = true;
+            submitBtn.classList.add('loading');
+            btnText.textContent = '仿真计算中...';
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingState').style.display = 'none';
+            
+            const submitBtn = document.getElementById('submitBtn');
+            const btnText = document.getElementById('btnText');
+            
+            submitBtn.disabled = false;
+            submitBtn.classList.remove('loading');
+            btnText.textContent = '开始仿真计算';
+        }
+
+        function displayResults(result) {
+            hideLoading();
+            
+            document.getElementById('emptyState').style.display = 'none';
+            document.getElementById('resultContent').style.display = 'block';
+
+            // 显示仿真概况
+            const combined = result.combined_results || {};
+            const overview = combined['仿真概况'] || {};
+            
+            document.getElementById('overallStatus').innerHTML = 
+                `<span class="status-indicator ${overview['总体状态'] === '成功' ? 'status-success' : 'status-error'}">${overview['总体状态'] || '未知'}</span>`;
+            document.getElementById('aspenStatus').innerHTML = 
+                `<span class="status-indicator ${overview['ASPEN仿真状态'] === '成功' ? 'status-success' : 'status-error'}">${overview['ASPEN仿真状态'] || '未知'}</span>`;
+            document.getElementById('powerStatus').innerHTML = 
+                `<span class="status-indicator ${overview['功率计算状态'] === '成功' ? 'status-success' : 'status-error'}">${overview['功率计算状态'] || '未知'}</span>`;
+            document.getElementById('simulationTime').textContent = overview['仿真时间'] || '未知';
+
+            // 显示ASPEN仿真结果
+            const aspenResults = combined['ASPEN仿真结果'] || {};
+            document.getElementById('powerOutput').textContent = aspenResults['功率输出'] || '未获取';
+            
+            // 格式化条件显示
+            const inletConditions = aspenResults['入口条件'] || {};
+            const outletConditions = aspenResults['出口条件'] || {};
+            const performanceMetrics = aspenResults['性能指标'] || {};
+            
+            document.getElementById('inletConditions').textContent = formatConditions(inletConditions);
+            document.getElementById('outletConditions').textContent = formatConditions(outletConditions);
+            document.getElementById('performanceMetrics').textContent = formatMetrics(performanceMetrics);
+
+            // 显示机组选型结果
+            const selectionResults = combined['机组选型结果'] || {};
+            const selectionOutput = selectionResults['选型输出'] || {};
+            displayUnitSelection(selectionOutput);
+
+            // 显示经济性分析
+            const economicResults = combined['经济性分析'] || {};
+            displayEconomicAnalysis(economicResults);
+        }
+
+        function formatConditions(conditions) {
+            if (!conditions || Object.keys(conditions).length === 0) return '暂无数据';
+            
+            const parts = [];
+            if (conditions.pressure !== undefined) parts.push(`压力: ${conditions.pressure} bar`);
+            if (conditions.temperature !== undefined) parts.push(`温度: ${conditions.temperature} °C`);
+            if (conditions.flow_rate !== undefined) parts.push(`流量: ${conditions.flow_rate} kmol/hr`);
+            
+            return parts.length > 0 ? parts.join(', ') : '数据解析中';
+        }
+
+        function formatMetrics(metrics) {
+            if (!metrics || Object.keys(metrics).length === 0) return '暂无数据';
+            
+            const parts = [];
+            if (metrics.efficiency !== undefined) parts.push(`效率: ${(metrics.efficiency * 100).toFixed(1)}%`);
+            if (metrics.pressure_ratio !== undefined) parts.push(`压比: ${metrics.pressure_ratio.toFixed(2)}`);
+            if (metrics.expansion_ratio !== undefined) parts.push(`膨胀比: ${metrics.expansion_ratio.toFixed(2)}`);
+            
+            return parts.length > 0 ? parts.join(', ') : '数据解析中';
+        }
+
+        function displayUnitSelection(data) {
+            const grid = document.getElementById('unitSelectionGrid');
+            grid.innerHTML = '';
+
+            const unitParams = data['机组参数'] || {};
+            const techParams = data['技术参数'] || {};
+
+            // 机组参数
+            Object.entries(unitParams).forEach(([key, value]) => {
+                grid.innerHTML += `
+                    <div class="result-item">
+                        <div class="result-label">${key}</div>
+                        <div class="result-value">${value}</div>
+                    </div>
+                `;
+            });
+
+            // 技术参数
+            Object.entries(techParams).forEach(([key, value]) => {
+                grid.innerHTML += `
+                    <div class="result-item">
+                        <div class="result-label">${key}</div>
+                        <div class="result-value">${value}</div>
+                    </div>
+                `;
+            });
+
+            // 其他重要指标
+            ['净发电功率', '年收益率', '回报周期'].forEach(key => {
+                if (data[key]) {
+                    grid.innerHTML += `
+                        <div class="result-item">
+                            <div class="result-label">${key}</div>
+                            <div class="result-value">${data[key]}</div>
+                        </div>
+                    `;
+                }
+            });
+        }
+
+        function displayEconomicAnalysis(data) {
+            const grid = document.getElementById('economicGrid');
+            grid.innerHTML = '';
+
+            Object.entries(data).forEach(([key, value]) => {
+                grid.innerHTML += `
+                    <div class="result-item">
+                        <div class="result-label">${key}</div>
+                        <div class="result-value">${value}</div>
+                    </div>
+                `;
+            });
+        }
+
+        function displayError(message) {
+            hideLoading();
+            
+            document.getElementById('emptyState').style.display = 'none';
+            document.getElementById('resultContent').innerHTML = `
+                <div class="result-card">
+                    <h3 class="card-title">错误信息</h3>
+                    <div class="result-item">
+                        <div class="result-label">错误详情</div>
+                        <div class="result-value" style="color: #ef4444;">${message}</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-label">建议</div>
+                        <div class="result-value" style="color: #94a3b8;">请检查输入参数并重试，或联系技术支持</div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('resultContent').style.display = 'block';
+        }
+
+        // 气体组成总和验证和实时提示
+        const gasInputs = ['ch4', 'c2h6', 'c3h8', 'c4h10', 'n2', 'co2', 'h2s'];
+        let totalDisplay = null;
+
+        // 创建总和显示元素
+        function createTotalDisplay() {
+            if (!totalDisplay) {
+                totalDisplay = document.createElement('div');
+                totalDisplay.style.cssText = `
+                    margin-top: 1rem;
+                    padding: 0.5rem 1rem;
+                    border-radius: 8px;
+                    font-size: 0.9rem;
+                    font-weight: 600;
+                    text-align: center;
+                    transition: all 0.3s ease;
+                `;
+                document.querySelector('.gas-composition').parentNode.appendChild(totalDisplay);
+            }
+        }
+
+        function updateTotal() {
+            const total = gasInputs.reduce((sum, inputId) => {
+                return sum + (parseFloat(document.getElementById(inputId).value) || 0);
+            }, 0);
+            
+            createTotalDisplay();
+            
+            if (Math.abs(total - 100) < 0.1) {
+                totalDisplay.style.background = 'rgba(0, 255, 136, 0.2)';
+                totalDisplay.style.color = '#00ff88';
+                totalDisplay.style.border = '1px solid rgba(0, 255, 136, 0.4)';
+                totalDisplay.textContent = `✓ 气体组成总和: ${total.toFixed(1)}%`;
+            } else {
+                totalDisplay.style.background = 'rgba(255, 193, 7, 0.2)';
+                totalDisplay.style.color = '#ffc107';
+                totalDisplay.style.border = '1px solid rgba(255, 193, 7, 0.4)';
+                totalDisplay.textContent = `⚠ 气体组成总和: ${total.toFixed(1)}% (应为100%)`;
+            }
+        }
+
+        gasInputs.forEach(id => {
+            document.getElementById(id).addEventListener('input', updateTotal);
+        });
+
+        // 初始化总和显示
+        updateTotal();
+
+        // 单位换算提示
+        document.getElementById('gasFlowRate').addEventListener('input', function() {
+            const nm3Day = parseFloat(this.value) || 0;
+            const scmh = nm3Day / 24;
+            
+            // 可以在这里添加换算提示
+            if (nm3Day > 0) {
+                this.title = `相当于 ${scmh.toFixed(2)} scmh`;
+            }
+        });
+    </script>
+</body>
+</html>
