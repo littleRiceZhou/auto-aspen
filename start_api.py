@@ -35,7 +35,7 @@ def check_dependencies():
         print("pip install -r requirements.txt")
         return False
 
-def start_api_server(host: str = "0.0.0.0", port: int = 8000, reload: bool = True):
+def start_api_server(host: str = "0.0.0.0", port: int = 8000, reload: bool = True, workers=1):
     """启动API服务器"""
     try:
         # 显示环境配置
@@ -65,7 +65,8 @@ def start_api_server(host: str = "0.0.0.0", port: int = 8000, reload: bool = Tru
             host=host,
             port=port,
             reload=reload,
-            log_level="info"
+            log_level="info",
+            workers=workers
         )
         
     except KeyboardInterrupt:
@@ -80,6 +81,7 @@ def main():
     parser.add_argument("--host", default="0.0.0.0", help="服务器主机地址 (默认: 0.0.0.0)")
     parser.add_argument("--port", type=int, default=8000, help="服务器端口 (默认: 8000)")
     parser.add_argument("--no-reload", action="store_true", help="禁用自动重载")
+    parser.add_argument("--workers", type=int, default=10, help="工作进程数 (默认: 10)")
     parser.add_argument("--apwz-file", help="APWZ文件路径 (会设置环境变量ASPEN_APWZ_FILE_PATH)")
     
     args = parser.parse_args()
@@ -111,7 +113,8 @@ def main():
     start_api_server(
         host=args.host,
         port=args.port,
-        reload=not args.no_reload
+        reload=not args.no_reload,
+        workers=args.workers
     )
 
 if __name__ == "__main__":

@@ -34,7 +34,7 @@ python start_api.py
 python start_api.py --apwz-file /path/to/your/model.apwz
 
 # 自定义主机和端口
-python start_api.py --host 127.0.0.1 --port 9000
+python start_api.py --host 0.0.0.0 --port 9000 --no-reload
 ```
 
 ### 方式2: 设置环境变量后启动

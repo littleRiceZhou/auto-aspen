@@ -887,7 +887,7 @@
             // 验证气体组成总和
             const totalComposition = Object.values(data.gas_composition).reduce((sum, val) => sum + val, 0);
             if (Math.abs(totalComposition - 100) > 0.1) {
-                alert(`气体组成总和应为100%，当前为：${totalComposition.toFixed(1)}%\n请调整各组分的百分比。`);
+                alert(`气体组成总和应为100%，当前为：${totalComposition.toFixed(2)}%\n请调整各组分的百分比。`);
                 return;
             }
 
@@ -961,14 +961,14 @@
             const aspenResults = combined['ASPEN仿真结果'] || {};
             document.getElementById('powerOutput').textContent = aspenResults['功率输出'] || '未获取';
             
-            // 格式化条件显示
+            // 格式化条件显示 - 使用新的详细显示方式
             const inletConditions = aspenResults['入口条件'] || {};
             const outletConditions = aspenResults['出口条件'] || {};
             const performanceMetrics = aspenResults['性能指标'] || {};
             
-            document.getElementById('inletConditions').textContent = formatConditions(inletConditions);
-            document.getElementById('outletConditions').textContent = formatConditions(outletConditions);
-            document.getElementById('performanceMetrics').textContent = formatMetrics(performanceMetrics);
+            displayDetailedConditions('inletConditions', inletConditions, '入口条件');
+            displayDetailedConditions('outletConditions', outletConditions, '出口条件');
+            displayDetailedMetrics('performanceMetrics', performanceMetrics, '性能指标');
 
             // 显示机组选型结果
             const selectionResults = combined['机组选型结果'] || {};
@@ -984,9 +984,9 @@
             if (!conditions || Object.keys(conditions).length === 0) return '暂无数据';
             
             const parts = [];
-            if (conditions.pressure !== undefined) parts.push(`压力: ${conditions.pressure} bar`);
-            if (conditions.temperature !== undefined) parts.push(`温度: ${conditions.temperature} °C`);
-            if (conditions.flow_rate !== undefined) parts.push(`流量: ${conditions.flow_rate} kmol/hr`);
+            if (conditions.pressure !== undefined) parts.push(`压力: ${parseFloat(conditions.pressure).toFixed(2)} bar`);
+            if (conditions.temperature !== undefined) parts.push(`温度: ${parseFloat(conditions.temperature).toFixed(2)} °C`);
+            if (conditions.flow_rate !== undefined) parts.push(`流量: ${parseFloat(conditions.flow_rate).toFixed(2)} kmol/hr`);
             
             return parts.length > 0 ? parts.join(', ') : '数据解析中';
         }
@@ -995,11 +995,125 @@
             if (!metrics || Object.keys(metrics).length === 0) return '暂无数据';
             
             const parts = [];
-            if (metrics.efficiency !== undefined) parts.push(`效率: ${(metrics.efficiency * 100).toFixed(1)}%`);
+            if (metrics.efficiency !== undefined) parts.push(`效率: ${(metrics.efficiency * 100).toFixed(2)}%`);
             if (metrics.pressure_ratio !== undefined) parts.push(`压比: ${metrics.pressure_ratio.toFixed(2)}`);
             if (metrics.expansion_ratio !== undefined) parts.push(`膨胀比: ${metrics.expansion_ratio.toFixed(2)}`);
             
             return parts.length > 0 ? parts.join(', ') : '数据解析中';
+        }
+
+        function formatNumberValue(key, value) {
+            // 如果值不是数字或为空，直接返回原值
+            if (value === null || value === undefined || value === '' || isNaN(parseFloat(value))) {
+                return value;
+            }
+
+            const numValue = parseFloat(value);
+            const keyLower = key.toLowerCase();
+            
+            // 检查是否包含需要格式化的关键词
+            if (keyLower.includes('流量') || keyLower.includes('flow') ||
+                keyLower.includes('温度') || keyLower.includes('temperature') ||
+                keyLower.includes('压力') || keyLower.includes('pressure') ||
+                keyLower.includes('效率') || keyLower.includes('efficiency') ||
+                keyLower.includes('功率') || keyLower.includes('power') ||
+                keyLower.includes('转速') || keyLower.includes('speed') ||
+                keyLower.includes('比率') || keyLower.includes('ratio') ||
+                keyLower.includes('收益') || keyLower.includes('return') ||
+                // 检查数值是否看起来像需要格式化的数值（有小数点且小数位数>2）
+                (typeof value === 'string' && value.includes('.') && value.split('.')[1].length > 2) ||
+                (typeof value === 'number' && !Number.isInteger(numValue))) {
+                
+                return numValue.toFixed(2);
+            }
+            
+            return value;
+        }
+
+        function displayDetailedConditions(elementId, conditions, title) {
+            const element = document.getElementById(elementId);
+            if (!conditions || Object.keys(conditions).length === 0) {
+                element.innerHTML = '<div style="color: #64748b; font-style: italic;">暂无数据</div>';
+                return;
+            }
+
+            let html = '';
+            
+            if (conditions.pressure !== undefined) {
+                html += `
+                    <div style="margin-bottom: 0.5rem;">
+                        <span style="color: #94a3b8; font-size: 0.85rem;">压力：</span>
+                        <span style="color: #e2e8f0; font-weight: 600;">${parseFloat(conditions.pressure).toFixed(2)} bar</span>
+                    </div>
+                `;
+            }
+            
+            if (conditions.temperature !== undefined) {
+                html += `
+                    <div style="margin-bottom: 0.5rem;">
+                        <span style="color: #94a3b8; font-size: 0.85rem;">温度：</span>
+                        <span style="color: #e2e8f0; font-weight: 600;">${parseFloat(conditions.temperature).toFixed(2)} °C</span>
+                    </div>
+                `;
+            }
+            
+            if (conditions.flow_rate !== undefined) {
+                html += `
+                    <div style="margin-bottom: 0.5rem;">
+                        <span style="color: #94a3b8; font-size: 0.85rem;">流量：</span>
+                        <span style="color: #e2e8f0; font-weight: 600;">${parseFloat(conditions.flow_rate).toFixed(2)} kmol/hr</span>
+                    </div>
+                `;
+            }
+
+            if (html === '') {
+                element.innerHTML = '<div style="color: #64748b; font-style: italic;">数据解析中</div>';
+            } else {
+                element.innerHTML = html;
+            }
+        }
+
+        function displayDetailedMetrics(elementId, metrics, title) {
+            const element = document.getElementById(elementId);
+            if (!metrics || Object.keys(metrics).length === 0) {
+                element.innerHTML = '<div style="color: #64748b; font-style: italic;">暂无数据</div>';
+                return;
+            }
+
+            let html = '';
+            
+            if (metrics.efficiency !== undefined) {
+                html += `
+                    <div style="margin-bottom: 0.5rem;">
+                        <span style="color: #94a3b8; font-size: 0.85rem;">效率：</span>
+                        <span style="color: #e2e8f0; font-weight: 600;">${(metrics.efficiency * 100).toFixed(2)}%</span>
+                    </div>
+                `;
+            }
+            
+            if (metrics.pressure_ratio !== undefined) {
+                html += `
+                    <div style="margin-bottom: 0.5rem;">
+                        <span style="color: #94a3b8; font-size: 0.85rem;">压比：</span>
+                        <span style="color: #e2e8f0; font-weight: 600;">${metrics.pressure_ratio.toFixed(2)}</span>
+                    </div>
+                `;
+            }
+            
+            if (metrics.expansion_ratio !== undefined) {
+                html += `
+                    <div style="margin-bottom: 0.5rem;">
+                        <span style="color: #94a3b8; font-size: 0.85rem;">膨胀比：</span>
+                        <span style="color: #e2e8f0; font-weight: 600;">${metrics.expansion_ratio.toFixed(2)}</span>
+                    </div>
+                `;
+            }
+
+            if (html === '') {
+                element.innerHTML = '<div style="color: #64748b; font-style: italic;">数据解析中</div>';
+            } else {
+                element.innerHTML = html;
+            }
         }
 
         function displayUnitSelection(data) {
@@ -1011,20 +1125,22 @@
 
             // 机组参数
             Object.entries(unitParams).forEach(([key, value]) => {
+                const formattedValue = formatNumberValue(key, value);
                 grid.innerHTML += `
                     <div class="result-item">
                         <div class="result-label">${key}</div>
-                        <div class="result-value">${value}</div>
+                        <div class="result-value">${formattedValue}</div>
                     </div>
                 `;
             });
 
             // 技术参数
             Object.entries(techParams).forEach(([key, value]) => {
+                const formattedValue = formatNumberValue(key, value);
                 grid.innerHTML += `
                     <div class="result-item">
                         <div class="result-label">${key}</div>
-                        <div class="result-value">${value}</div>
+                        <div class="result-value">${formattedValue}</div>
                     </div>
                 `;
             });
@@ -1032,10 +1148,11 @@
             // 其他重要指标
             ['净发电功率', '年收益率', '回报周期'].forEach(key => {
                 if (data[key]) {
+                    const formattedValue = formatNumberValue(key, data[key]);
                     grid.innerHTML += `
                         <div class="result-item">
                             <div class="result-label">${key}</div>
-                            <div class="result-value">${data[key]}</div>
+                            <div class="result-value">${formattedValue}</div>
                         </div>
                     `;
                 }
@@ -1047,10 +1164,11 @@
             grid.innerHTML = '';
 
             Object.entries(data).forEach(([key, value]) => {
+                const formattedValue = formatNumberValue(key, value);
                 grid.innerHTML += `
                     <div class="result-item">
                         <div class="result-label">${key}</div>
-                        <div class="result-value">${value}</div>
+                        <div class="result-value">${formattedValue}</div>
                     </div>
                 `;
             });
@@ -1108,12 +1226,12 @@
                 totalDisplay.style.background = 'rgba(0, 255, 136, 0.2)';
                 totalDisplay.style.color = '#00ff88';
                 totalDisplay.style.border = '1px solid rgba(0, 255, 136, 0.4)';
-                totalDisplay.textContent = `✓ 气体组成总和: ${total.toFixed(1)}%`;
+                totalDisplay.textContent = `✓ 气体组成总和: ${total.toFixed(2)}%`;
             } else {
                 totalDisplay.style.background = 'rgba(255, 193, 7, 0.2)';
                 totalDisplay.style.color = '#ffc107';
                 totalDisplay.style.border = '1px solid rgba(255, 193, 7, 0.4)';
-                totalDisplay.textContent = `⚠ 气体组成总和: ${total.toFixed(1)}% (应为100%)`;
+                totalDisplay.textContent = `⚠ 气体组成总和: ${total.toFixed(2)}% (应为100%)`;
             }
         }
 
