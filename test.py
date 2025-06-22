@@ -28,7 +28,7 @@ def main():
 
     pyaspen = PyASPENPlus()
     
-    result = pyaspen.run("test.bkp", return_json=True, visible=False)
+    result = pyaspen.run("./models/test.bkp", return_json=True, visible=False)
     print(result)
 
 

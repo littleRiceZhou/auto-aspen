@@ -8,10 +8,9 @@ import shutil
 from datetime import datetime
 import numpy as np
 import win32com.client as win32
+from typing import Dict, Any, Optional, List, Tuple
+from dataclasses import dataclass, field
 from loguru import logger
-
-BASE_DIR = os.path.abspath(os.path.join(os.path.abspath(__file__), '../' * 3))
-sys.path.append(BASE_DIR)
 
 
 class PyASPENPlus(object):
@@ -706,3 +705,426 @@ class PyASPENPlus(object):
             else:
                 return False
 
+
+@dataclass
+class SimulationParameters:
+    """仿真参数管理类"""
+    
+    gas_flow_rate: float = 10000.0  # scmh
+    inlet_pressure: float = 0.5     # MPaA
+    inlet_temperature: float = 25.0 # °C
+    outlet_pressure: float = 3.0    # MPaA
+    efficiency: float = 80.0        # %
+    gas_composition: Dict[str, float] = field(default_factory=lambda: {
+        'CH4': 85.0,    # 甲烷
+        'C2H6': 8.0,    # 乙烷
+        'C3H8': 3.0,    # 丙烷
+        'N2': 2.0,      # 氮气
+        'CO2': 2.0      # 二氧化碳
+    })
+    other_requirements: str = '标准工况下的气体处理'
+    
+    @classmethod
+    def from_file(cls, file_path: str = 'simulation_parameters.py') -> 'SimulationParameters':
+        """从文件加载参数"""
+        try:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("simulation_parameters", file_path)
+            if spec and spec.loader:
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                params_dict = module.SIMULATION_PARAMETERS
+                return cls(**params_dict)
+        except (ImportError, AttributeError, FileNotFoundError) as e:
+            logger.info(f"无法从文件加载参数: {str(e)}, 使用默认参数")
+        
+        return cls()
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为字典"""
+        return {
+            'gas_flow_rate': self.gas_flow_rate,
+            'inlet_pressure': self.inlet_pressure,
+            'inlet_temperature': self.inlet_temperature,
+            'outlet_pressure': self.outlet_pressure,
+            'efficiency': self.efficiency,
+            'gas_composition': self.gas_composition,
+            'other_requirements': self.other_requirements
+        }
+    
+    def log_parameters(self) -> None:
+        """记录参数信息"""
+        logger.info("仿真参数:")
+        for key, value in self.to_dict().items():
+            logger.info(f"  {key}: {value}")
+
+
+@dataclass
+class SimulationResult:
+    """仿真结果管理类"""
+    
+    success: bool = False
+    errors: List[str] = field(default_factory=list)
+    warnings: List[str] = field(default_factory=list)
+    streams: Dict[str, Any] = field(default_factory=dict)
+    blocks: Dict[str, Any] = field(default_factory=dict)
+    summary: Dict[str, Any] = field(default_factory=dict)
+    
+    def add_error(self, error: str) -> None:
+        """添加错误信息"""
+        self.errors.append(error)
+    
+    def add_warning(self, warning: str) -> None:
+        """添加警告信息"""
+        self.warnings.append(warning)
+    
+    def set_summary(self, stream_count: int, block_count: int) -> None:
+        """设置摘要信息"""
+        self.summary = {
+            'stream_count': stream_count,
+            'block_count': block_count
+        }
+    
+    def log_results(self) -> None:
+        """记录结果信息"""
+        logger.info("仿真完成，详细结果:")
+        logger.info(f"成功状态: {self.success}")
+        logger.info(f"错误数量: {len(self.errors)}")
+        logger.info(f"警告数量: {len(self.warnings)}")
+        logger.info(f"物料流数量: {self.summary.get('stream_count', 0)}")
+        logger.info(f"设备块数量: {self.summary.get('block_count', 0)}")
+        
+        # 输出物料流信息
+        if self.streams:
+            logger.info("物料流信息:")
+            for stream_name, stream_data in self.streams.items():
+                logger.info(f"  {stream_name}:")
+                if isinstance(stream_data, dict):
+                    for prop_name, prop_data in stream_data.items():
+                        if isinstance(prop_data, dict) and 'value' in prop_data:
+                            logger.info(f"    {prop_name}: {prop_data.get('value', 'N/A')} {prop_data.get('unit', '')}")
+        
+        # 输出设备块信息
+        if self.blocks:
+            logger.info("设备块信息:")
+            for block_name, block_data in self.blocks.items():
+                logger.info(f"  {block_name}:")
+                if isinstance(block_data, dict):
+                    for prop_name, prop_data in block_data.items():
+                        if isinstance(prop_data, dict) and 'value' in prop_data:
+                            logger.info(f"    {prop_name}: {prop_data.get('value', 'N/A')} {prop_data.get('unit', '')}")
+        
+        # 输出错误和警告信息
+        if self.errors:
+            logger.error("仿真错误:")
+            for error in self.errors:
+                logger.error(f"  - {error}")
+        
+        if self.warnings:
+            logger.warning("仿真警告:")
+            for warning in self.warnings:
+                logger.warning(f"  - {warning}")
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为字典"""
+        return {
+            'success': self.success,
+            'errors': self.errors,
+            'warnings': self.warnings,
+            'streams': self.streams,
+            'blocks': self.blocks,
+            'summary': self.summary
+        }
+    
+    def save_to_json(self, output_file: str = "simulation_results.json") -> bool:
+        """保存结果到JSON文件"""
+        try:
+            with open(output_file, 'w', encoding='utf-8') as f:
+                json.dump(self.to_dict(), f, ensure_ascii=False, indent=2, default=str)
+            logger.info(f"JSON 结果已保存到: {output_file}")
+            return True
+        except Exception as e:
+            logger.error(f"保存 JSON 结果失败: {str(e)}")
+            return False
+
+
+class APWZSimulator:
+    """APWZ仿真器类"""
+    
+    def __init__(self, apwz_file: str, aspen_version: str = '14.0'):
+        """
+        初始化仿真器
+        
+        :param apwz_file: APWZ文件路径
+        :param aspen_version: ASPEN版本
+        """
+        self.apwz_file = apwz_file
+        self.aspen_version = aspen_version
+        self.aspen: Optional[PyASPENPlus] = None
+        self.is_initialized = False
+        
+    def __enter__(self):
+        """上下文管理器入口"""
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """上下文管理器出口"""
+        self.close()
+    
+    def initialize(self, visible: bool = True, dialogs: bool = False) -> bool:
+        """初始化ASPEN应用"""
+        try:
+            if not os.path.exists(self.apwz_file):
+                logger.error(f"文件 {self.apwz_file} 不存在")
+                return False
+            
+            # 创建 ASPEN Plus 实例
+            self.aspen = PyASPENPlus()
+            
+            # 初始化应用
+            logger.info("初始化 ASPEN Plus...")
+            self.aspen.init_app(ap_version=self.aspen_version)
+            
+            # 加载文件
+            logger.info(f"加载 .apwz 文件: {self.apwz_file}")
+            self.aspen.load_ap_file(self.apwz_file, visible=visible, dialogs=dialogs)
+            
+            self.is_initialized = True
+            logger.info("ASPEN 应用初始化成功")
+            return True
+            
+        except Exception as e:
+            logger.error(f"初始化 ASPEN 应用失败: {str(e)}")
+            return False
+    
+    def set_parameters(self, parameters: SimulationParameters) -> bool:
+        """设置仿真参数"""
+        if not self.is_initialized or not self.aspen:
+            logger.error("ASPEN 应用未初始化")
+            return False
+        
+        try:
+            logger.info("开始设置仿真参数...")
+            
+            # 设置气体体积流量
+            success_count = 0
+            
+            if self._set_gas_flow_rate(parameters.gas_flow_rate):
+                success_count += 1
+            
+            if self._set_inlet_pressure(parameters.inlet_pressure):
+                success_count += 1
+            
+            if self._set_inlet_temperature(parameters.inlet_temperature):
+                success_count += 1
+            
+            if self._set_outlet_pressure(parameters.outlet_pressure):
+                success_count += 1
+            
+            if self._set_gas_composition(parameters.gas_composition):
+                success_count += 1
+            
+            if self._set_efficiency(parameters.efficiency):
+                success_count += 1
+            
+            logger.info(f"参数设置完成，成功设置 {success_count}/6 个参数组")
+            return success_count > 0
+            
+        except Exception as e:
+            logger.error(f"设置参数时发生错误: {str(e)}")
+            return False
+    
+    def _set_gas_flow_rate(self, flow_rate: float) -> bool:
+        """设置气体体积流量"""
+        logger.info(f"设置气体体积流量: {flow_rate} scmh")
+        
+        flow_paths = [
+            r"\Data\Streams\INLET\Input\TOTFLOW\MIXED",
+            r"\Data\Streams\INLET\Input\VOLFLOW\MIXED", 
+            r"\Data\Streams\INLET\Input\FLOW\MIXED"
+        ]
+        
+        return self._set_parameter_by_paths(flow_paths, flow_rate, "气体流量")
+    
+    def _set_inlet_pressure(self, pressure: float) -> bool:
+        """设置进气压力"""
+        logger.info(f"设置进气压力: {pressure} MPaA")
+        
+        pressure_value = pressure * 10  # MPaA -> bara
+        pressure_paths = [
+            r"\Data\Streams\INLET\Input\PRES",
+            r"\Data\Streams\INLET\Input\PRES\MIXED"
+        ]
+        
+        return self._set_parameter_by_paths(pressure_paths, pressure_value, "进气压力")
+    
+    def _set_inlet_temperature(self, temperature: float) -> bool:
+        """设置进气温度"""
+        logger.info(f"设置进气温度: {temperature} °C")
+        
+        temp_paths = [
+            r"\Data\Streams\INLET\Input\TEMP\MIXED",
+            r"\Data\Streams\INLET\Input\TEMP"
+        ]
+        
+        return self._set_parameter_by_paths(temp_paths, temperature, "进气温度")
+    
+    def _set_outlet_pressure(self, pressure: float) -> bool:
+        """设置排气压力"""
+        logger.info(f"设置排气压力(排放压力): {pressure} MPaA")
+        
+        pressure_value = pressure * 10  # MPaA -> bara
+        expander_paths = [
+            r"\Data\Blocks\EXPANDER\Input\PRES"
+        ]
+        
+        return self._set_parameter_by_paths(expander_paths, pressure_value, "排放压力")
+    
+    def _set_efficiency(self, efficiency: float) -> bool:
+        """设置机组效率"""
+        logger.info(f"设置机组效率(等熵效率): {efficiency}%")
+        
+        efficiency_value = efficiency / 100.0  # 百分比转换为小数
+        eff_paths = [
+            r"\Data\Blocks\EXPANDER\Input\SEFF"
+        ]
+        
+        return self._set_parameter_by_paths(eff_paths, efficiency_value, "等熵效率")
+    
+    def _set_gas_composition(self, composition: Dict[str, float]) -> bool:
+        """设置气体组分"""
+        logger.info("设置气体组分...")
+        
+        total_set = 0
+        for component, fraction in composition.items():
+            comp_paths = [
+                f"\\Data\\Streams\\INLET\\Input\\FLOW\\MIXED\\{component}",
+                f"\\Data\\Streams\\INLET\\Input\\COMPFLOW\\MIXED\\{component}"
+            ]
+            
+            fraction_value = fraction / 100.0  # 百分比转换为小数
+            if self._set_parameter_by_paths(comp_paths, fraction_value, f"组分 {component}"):
+                total_set += 1
+        
+        logger.info(f"成功设置 {total_set} 个组分")
+        return total_set > 0
+    
+    def _set_parameter_by_paths(self, paths: List[str], value: float, param_name: str) -> bool:
+        """通过路径列表设置参数"""
+        for path in paths:
+            try:
+                node = self.aspen.app.Tree.FindNode(path)
+                if node:
+                    node.Value = value
+                    logger.info(f"成功设置{param_name}: {value} (路径: {path})")
+                    return True
+            except Exception as e:
+                logger.debug(f"{param_name}路径 {path} 设置失败: {str(e)}")
+        
+        logger.warning(f"所有{param_name}路径设置都失败")
+        return False
+    
+    def run_simulation(self, reinit: bool = True, sleep: float = 2.0) -> bool:
+        """运行仿真"""
+        if not self.is_initialized or not self.aspen:
+            logger.error("ASPEN 应用未初始化")
+            return False
+        
+        try:
+            logger.info("开始运行仿真...")
+            self.aspen.run_simulation(reinit=reinit, sleep=sleep)
+            
+            # 检查仿真状态
+            logger.info("检查仿真状态...")
+            status = self.aspen.check_simulation_status()
+            logger.info(f"仿真状态: {'成功' if status[0] else '失败'}")
+            
+            return status[0]
+            
+        except Exception as e:
+            logger.error(f"运行仿真失败: {str(e)}")
+            return False
+    
+    def get_results(self) -> SimulationResult:
+        """获取仿真结果"""
+        result = SimulationResult()
+        
+        if not self.is_initialized or not self.aspen:
+            result.add_error("ASPEN 应用未初始化")
+            return result
+        
+        try:
+            logger.info("获取仿真结果...")
+            
+            # 获取基本结果
+            aspen_result = self.aspen.get_simulation_results(auto_discover=True)
+            
+            # 填充结果对象
+            result.success = aspen_result.get('success', False)
+            result.errors = aspen_result.get('errors', [])
+            result.warnings = aspen_result.get('warnings', [])
+            result.streams = aspen_result.get('streams', {})
+            result.blocks = aspen_result.get('blocks', {})
+            result.summary = aspen_result.get('summary', {})
+            
+            # 特别获取 EXPANDER 设备块的详细结果
+            logger.info("获取 EXPANDER 设备块详细结果...")
+            try:
+                expander_results = self.aspen._get_block_properties("EXPANDER", auto_discover=True)
+                if expander_results:
+                    if 'blocks' not in result.blocks:
+                        result.blocks = {}
+                    result.blocks['EXPANDER'] = expander_results
+                    logger.info(f"成功获取 EXPANDER 设备块 {len(expander_results)} 个参数")
+                else:
+                    logger.warning("未能获取 EXPANDER 设备块详细结果")
+            except Exception as e:
+                logger.warning(f"获取 EXPANDER 设备块结果时出错: {str(e)}")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"获取仿真结果失败: {str(e)}")
+            result.add_error(f"获取仿真结果失败: {str(e)}")
+            return result
+    
+    def close(self) -> None:
+        """关闭ASPEN应用"""
+        if self.aspen:
+            try:
+                self.aspen.close_app()
+                logger.info("ASPEN 应用已关闭")
+            except Exception as e:
+                logger.warning(f"关闭 ASPEN 应用时出错: {str(e)}")
+            finally:
+                self.aspen = None
+                self.is_initialized = False
+    
+    def run_full_simulation(self, parameters: SimulationParameters) -> SimulationResult:
+        """运行完整仿真流程"""
+        result = SimulationResult()
+        
+        try:
+            # 初始化
+            if not self.initialize():
+                result.add_error("初始化失败")
+                return result
+            
+            # 设置参数
+            if not self.set_parameters(parameters):
+                result.add_warning("参数设置可能不完整")
+            
+            # 运行仿真
+            if not self.run_simulation():
+                result.add_error("仿真运行失败")
+                return result
+            
+            # 获取结果
+            result = self.get_results()
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"完整仿真流程失败: {str(e)}")
+            result.add_error(f"完整仿真流程失败: {str(e)}")
+            return result
