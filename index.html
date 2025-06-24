@@ -538,6 +538,49 @@
             line-height: 1.6;
         }
 
+
+
+        /* 机组布局图样式 */
+        .diagram-container {
+            text-align: center;
+            min-height: 400px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .diagram-image {
+            max-width: 100%;
+            height: auto;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(120, 219, 255, 0.15);
+            transition: all 0.3s ease;
+        }
+
+        .diagram-image:hover {
+            transform: scale(1.02);
+            box-shadow: 0 12px 40px rgba(120, 219, 255, 0.25);
+        }
+
+        .diagram-info {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: rgba(15, 15, 35, 0.7);
+            border-radius: 8px;
+            border-left: 4px solid #78dbff;
+        }
+
+        .diagram-info h4 {
+            color: #78dbff;
+            margin-bottom: 0.5rem;
+        }
+
+        .diagram-info p {
+            color: #94a3b8;
+            font-size: 0.9rem;
+            margin: 0;
+        }
+
         /* 响应式设计 */
         @media (max-width: 1024px) {
             .input-panel {
@@ -828,6 +871,18 @@
                         <!-- 动态生成 -->
                     </div>
                 </div>
+
+                <!-- 机组布局图 -->
+                <div class="result-card">
+                    <h3 class="card-title">🏗️ 机组布局示意图</h3>
+                    <div id="diagramContent" class="diagram-container">
+                        <div class="empty-state">
+                            <div class="empty-icon">🏗️</div>
+                            <h3>等待生成布局图</h3>
+                            <p>系统将根据计算结果自动生成机组布局示意图</p>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -835,6 +890,7 @@
     <script>
         // Tab切换功能
         function initTabs() {
+            // 输入面板Tab功能
             const tabButtons = document.querySelectorAll('.tab-button');
             const tabContents = document.querySelectorAll('.tab-content');
 
@@ -849,7 +905,10 @@
 
                     // 显示对应的内容
                     const tabId = button.getAttribute('data-tab') + '-tab';
-                    document.getElementById(tabId).classList.add('active');
+                    const targetTab = document.getElementById(tabId);
+                    if (targetTab) {
+                        targetTab.classList.add('active');
+                    }
                 });
             });
         }
@@ -978,6 +1037,9 @@
             // 显示经济性分析
             const economicResults = combined['经济性分析'] || {};
             displayEconomicAnalysis(economicResults);
+
+            // 显示机组布局图
+            displayDiagram(result);
         }
 
         function formatConditions(conditions) {
@@ -1122,10 +1184,56 @@
 
             const unitParams = data['机组参数'] || {};
             const techParams = data['技术参数'] || {};
+            const powerDistribution = data['功率分配'] || {};
+
+            // 设计类型（突出显示）
+            if (data['设计类型']) {
+                grid.innerHTML += `
+                    <div class="result-item" style="border-left: 4px solid #ff77c6;">
+                        <div class="result-label">设计类型</div>
+                        <div class="result-value" style="color: #ff77c6; font-weight: 800;">${data['设计类型']}</div>
+                    </div>
+                `;
+            }
+
+            // 功率分配（如果是双级设计）
+            if (Object.keys(powerDistribution).length > 0) {
+                Object.entries(powerDistribution).forEach(([key, value]) => {
+                    let itemStyle = '';
+                    let valueStyle = 'color: #e2e8f0;';
+                    
+                    // 为不同功率类型设置不同颜色
+                    if (key === '一级功率') {
+                        itemStyle = 'border-left: 4px solid #78dbff;';
+                        valueStyle = 'color: #78dbff; font-weight: 700;';
+                    } else if (key === '二级功率') {
+                        itemStyle = 'border-left: 4px solid #7877c6;';
+                        valueStyle = 'color: #7877c6; font-weight: 700;';
+                    } else if (key === '总净发电功率') {
+                        itemStyle = 'border-left: 4px solid #00ff88;';
+                        valueStyle = 'color: #00ff88; font-weight: 800;';
+                    }
+                    
+                    const formattedValue = formatNumberValue(key, value);
+                    grid.innerHTML += `
+                        <div class="result-item" style="${itemStyle}">
+                            <div class="result-label">${key}</div>
+                            <div class="result-value" style="${valueStyle}">${formattedValue}</div>
+                        </div>
+                    `;
+                });
+            }
 
             // 机组参数
             Object.entries(unitParams).forEach(([key, value]) => {
-                const formattedValue = formatNumberValue(key, value);
+                console.log(key, value);
+                let formattedValue = ""
+                if (key == "机组尺寸"){
+                    formattedValue = value;
+                }else{
+                    formattedValue = formatNumberValue(key, value);
+                }
+                
                 grid.innerHTML += `
                     <div class="result-item">
                         <div class="result-label">${key}</div>
@@ -1147,7 +1255,7 @@
 
             // 其他重要指标
             ['净发电功率', '年收益率', '回报周期'].forEach(key => {
-                if (data[key]) {
+                if (data[key] && !powerDistribution.hasOwnProperty('总净发电功率')) {
                     const formattedValue = formatNumberValue(key, data[key]);
                     grid.innerHTML += `
                         <div class="result-item">
@@ -1174,6 +1282,59 @@
             });
         }
 
+        function displayDiagram(result) {
+            const diagramContent = document.getElementById('diagramContent');
+            
+            // 检查元素是否存在
+            if (!diagramContent) {
+                console.error('diagramContent element not found');
+                return;
+            }
+            
+            // 检查是否有机组布局图URL
+            if (result.diagram_url) {
+                const selectionOutput = result.combined_results?.['机组选型结果']?.['选型输出'] || {};
+                const designType = selectionOutput['设计类型'] || '单级发电机组';
+                const powerDistribution = selectionOutput['功率分配'] || {};
+                
+                let diagramInfo = '';
+                if (designType === '双级发电机组' && Object.keys(powerDistribution).length > 0) {
+                    diagramInfo = `
+                        <div class="diagram-info">
+                            <h4>双级发电机组配置</h4>
+                            <p>一级功率：${powerDistribution['一级功率'] || 'N/A'} | 二级功率：${powerDistribution['二级功率'] || 'N/A'}</p>
+                            <p>总净发电功率：${powerDistribution['总净发电功率'] || 'N/A'}</p>
+                        </div>
+                    `;
+                } else {
+                    diagramInfo = `
+                        <div class="diagram-info">
+                            <h4>单级发电机组配置</h4>
+                            <p>净发电功率：${selectionOutput['净发电功率'] || 'N/A'}</p>
+                        </div>
+                    `;
+                }
+                
+                diagramContent.innerHTML = `
+                    <div>
+                        <img src="${result.diagram_url}" 
+                             alt="机组布局示意图" 
+                             class="diagram-image"
+                             onerror="this.onerror=null; this.parentElement.innerHTML='<div class=&quot;empty-state&quot;><div class=&quot;empty-icon&quot;>⚠️</div><h3>图片加载失败</h3><p>无法加载机组布局示意图</p></div>';">
+                        ${diagramInfo}
+                    </div>
+                `;
+            } else {
+                diagramContent.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">⚠️</div>
+                        <h3>布局图生成失败</h3>
+                        <p>无法生成机组布局示意图，请检查系统配置</p>
+                    </div>
+                `;
+            }
+        }
+
         function displayError(message) {
             hideLoading();
             
@@ -1188,6 +1349,18 @@
                     <div class="result-item">
                         <div class="result-label">建议</div>
                         <div class="result-value" style="color: #94a3b8;">请检查输入参数并重试，或联系技术支持</div>
+                    </div>
+                </div>
+                
+                <!-- 机组布局图 -->
+                <div class="result-card">
+                    <h3 class="card-title">🏗️ 机组布局示意图</h3>
+                    <div class="diagram-container">
+                        <div class="empty-state">
+                            <div class="empty-icon">❌</div>
+                            <h3>无法生成布局图</h3>
+                            <p>由于仿真计算失败，无法生成机组布局示意图</p>
+                        </div>
                     </div>
                 </div>
             `;
