@@ -33,6 +33,7 @@ app = FastAPI(
 static_dir = "static/diagrams"
 os.makedirs(static_dir, exist_ok=True)
 
+
 # 挂载静态文件
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
