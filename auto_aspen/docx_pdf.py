@@ -41,6 +41,19 @@ def get_auto_aspen_parameter_mapping():
         "auto_aspen_14": "315.36",    # 年净发电收益 (万元)
         "auto_aspen_15": "184.0",     # 年节约标准煤 (吨)
         "auto_aspen_16": "505.4",     # 年减少CO₂排放 (吨)
+        
+        # 机组公用工程 - 电源设备参数
+        "auto_aspen_17": "15",        # 辅油泵功率 (kW)
+        "auto_aspen_18": "12",        # 润滑油电加热器功率 (kW)
+        "auto_aspen_19": "8",         # 油雾分离器功率 (kW)
+        "auto_aspen_20": "1",         # 发电机加热器=空间加热器功率 (kW)
+        "auto_aspen_21": "3",         # PLC柜功率 (kW)
+        
+        # 机组公用工程 - 水油气参数
+        "auto_aspen_22": "850",       # 油冷器流量 (m³/Hr)
+        "auto_aspen_23": "45",        # 齿轮箱润滑油流量 (L/min)
+        "auto_aspen_24": "120",       # 氮气-干气密封气体流量 (Nm³/h)
+        "auto_aspen_25": "95",        # 压缩空气-气动阀气体流量 (Nm³/h)
     }
 
 def create_replacement_dict(parameter_values=None):
@@ -1008,7 +1021,7 @@ if __name__ == "__main__":
     print("="*50 + "\n")
     
     custom_params = get_auto_aspen_parameter_mapping()
-    result1 = generate_document(parameters=custom_params, output_name="demo_custom_formatted", convert_pdf=True, preserve_formatting=False)
+    result1 = generate_document(parameters=custom_params, output_name="demo_custom_formatted", convert_pdf=False, preserve_formatting=False)
     print(f"文本替换结果: {result1}")
     
     print("\n" + "="*50)
@@ -1035,7 +1048,7 @@ if __name__ == "__main__":
             images=[],
             text_to_images=text_to_image_replacements,
             output_name="demo_full_features",
-            convert_pdf=True,
+            convert_pdf=False,
             preserve_formatting=False
         )
         print(f"全功能测试结果: {full_result}")

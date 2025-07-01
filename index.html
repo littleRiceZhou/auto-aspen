@@ -581,6 +581,62 @@
             margin: 0;
         }
 
+        /* 文档下载样式 */
+        .download-container {
+            text-align: center;
+            min-height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+
+        .download-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 1rem;
+        }
+
+        .download-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            background: linear-gradient(135deg, rgba(120, 119, 198, 0.3), rgba(255, 119, 198, 0.2));
+            border: 1px solid rgba(120, 119, 198, 0.4);
+            border-radius: 8px;
+            color: #e2e8f0;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .download-btn:hover {
+            background: linear-gradient(135deg, rgba(120, 119, 198, 0.5), rgba(255, 119, 198, 0.3));
+            border-color: rgba(120, 119, 198, 0.6);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(120, 119, 198, 0.3);
+            color: #ffffff;
+        }
+
+        .download-icon {
+            font-size: 1.1rem;
+        }
+
+        .download-info {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: rgba(15, 15, 35, 0.7);
+            border-radius: 8px;
+            border-left: 4px solid #7877c6;
+            font-size: 0.85rem;
+            color: #94a3b8;
+        }
+
         /* 响应式设计 */
         @media (max-width: 1024px) {
             .input-panel {
@@ -872,6 +928,18 @@
                     </div>
                 </div>
 
+                <!-- 文档下载 -->
+                <div class="result-card">
+                    <h3 class="card-title">📄 技术文档下载</h3>
+                    <div id="documentDownloadContent" class="download-container">
+                        <div class="empty-state">
+                            <div class="empty-icon">📄</div>
+                            <h3>等待生成技术文档</h3>
+                            <p>系统将根据仿真结果自动生成技术报告文档</p>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- 机组布局图 -->
                 <div class="result-card">
                     <h3 class="card-title">🏗️ 机组布局示意图</h3>
@@ -1037,6 +1105,9 @@
             // 显示经济性分析
             const economicResults = combined['经济性分析'] || {};
             displayEconomicAnalysis(economicResults);
+
+            // 显示文档下载
+            displayDocumentDownload(result);
 
             // 显示机组布局图
             displayDiagram(result);
@@ -1280,6 +1351,59 @@
                     </div>
                 `;
             });
+        }
+
+        function displayDocumentDownload(result) {
+            const downloadContent = document.getElementById('documentDownloadContent');
+            
+            // 检查元素是否存在
+            if (!downloadContent) {
+                console.error('documentDownloadContent element not found');
+                return;
+            }
+            
+            // 检查是否有文档下载地址
+            if (result.document_urls && Object.keys(result.document_urls).length > 0) {
+                const selectionOutput = result.combined_results?.['机组选型结果']?.['选型输出'] || {};
+                const designType = selectionOutput['设计类型'] || '单级发电机组';
+                const netPower = selectionOutput['净发电功率'] || 'N/A';
+                
+                let downloadButtons = '';
+                Object.entries(result.document_urls).forEach(([format, url]) => {
+                    const formatUpper = format.toUpperCase();
+                    const icon = format === 'docx' ? '📄' : '📑';
+                    
+                    downloadButtons += `
+                        <a href="${url}" class="download-btn" download target="_blank">
+                            <span class="download-icon">${icon}</span>
+                            <span>下载 ${formatUpper} 文档</span>
+                        </a>
+                    `;
+                });
+                
+                downloadContent.innerHTML = `
+                    <div>
+                        <div class="download-buttons">
+                            ${downloadButtons}
+                        </div>
+                        <div class="download-info">
+                            <h4>📋 技术文档说明</h4>
+                            <p><strong>设计类型：</strong>${designType}</p>
+                            <p><strong>净发电功率：</strong>${netPower}</p>
+                            <p><strong>文档内容：</strong>包含完整的仿真结果、机组选型参数、公用工程配置和经济性分析</p>
+                            <p><small>💡 提示：点击下载按钮可获取包含所有计算参数的详细技术报告</small></p>
+                        </div>
+                    </div>
+                `;
+            } else {
+                downloadContent.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">⚠️</div>
+                        <h3>文档生成失败</h3>
+                        <p>无法生成技术文档，请检查系统配置或重新计算</p>
+                    </div>
+                `;
+            }
         }
 
         function displayDiagram(result) {

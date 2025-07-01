@@ -21,6 +21,7 @@ from auto_aspen.power_calculations import (
     EconomicParams, UnitSelectionParams
 )
 from auto_aspen import SimulationParameters, APWZSimulator
+from auto_aspen.docx_pdf import generate_document, get_auto_aspen_parameter_mapping
 
 # 创建FastAPI应用
 app = FastAPI(
@@ -92,6 +93,7 @@ class SimulationResponse(BaseModel):
     power_results: Optional[Dict[str, Any]] = Field(None, description="功率计算结果")
     combined_results: Optional[Dict[str, Any]] = Field(None, description="综合结果")
     diagram_url: Optional[str] = Field(None, description="机组布局图URL")
+    document_urls: Optional[Dict[str, str]] = Field(None, description="文档下载地址")
     error_message: Optional[str] = Field(None, description="错误信息")
 
 # ============ API路由定义 ============
@@ -168,11 +170,8 @@ async def run_comprehensive_simulation(request: SimulationRequest):
         if "simulation_results" in aspen_results:
             aspen_results["simulation_results"]["simulation_time"] = f"{simulation_duration:.2f}秒"
         
-        logger.info("Step 3: 合并仿真结果")
-        combined_results = create_combined_results(aspen_results, power_results, request)
-        
-        # Step 4: 生成机组布局图
-        logger.info("Step 4: 生成机组布局图")
+        # Step 3: 生成机组布局图
+        logger.info("Step 3: 生成机组布局图")
         diagram_result = generate_diagram_file(power_results)
         diagram_url = None
         if diagram_result["success"]:
@@ -181,6 +180,20 @@ async def run_comprehensive_simulation(request: SimulationRequest):
         else:
             logger.warning(f"机组布局图生成失败: {diagram_result.get('error')}")
         
+        # Step 4: 生成技术文档
+        logger.info("Step 4: 生成技术文档")
+        document_result = generate_technical_document(aspen_results, power_results, request)
+        document_urls = None
+        if document_result["success"]:
+            document_urls = document_result["document_urls"]
+            logger.info(f"技术文档已生成: {document_urls}")
+        else:
+            logger.warning(f"技术文档生成失败: {document_result.get('error')}")
+        
+        # Step 5: 合并仿真结果
+        logger.info("Step 5: 合并仿真结果")
+        combined_results = create_combined_results(aspen_results, power_results, request, document_urls)
+        
         logger.info(f"✅ 综合仿真计算成功完成，耗时: {simulation_duration:.2f}秒")
         
         return SimulationResponse(
@@ -188,7 +201,8 @@ async def run_comprehensive_simulation(request: SimulationRequest):
             aspen_results=aspen_results,
             power_results=power_results,
             combined_results=combined_results,
-            diagram_url=diagram_url
+            diagram_url=diagram_url,
+            document_urls=document_urls
         )
         
     except Exception as e:
@@ -565,6 +579,186 @@ async def run_power_calculation_internal(main_power: float, aspen_results: Dict[
         }
 
 
+def generate_technical_document(aspen_results: Dict[str, Any], power_results: Dict[str, Any], request: SimulationRequest) -> Dict[str, Any]:
+    """
+    生成技术文档（DOCX格式）
+    """
+    try:
+        # 从仿真结果中提取数据
+        aspen_sim = aspen_results.get("simulation_results", {})
+        power_selection = power_results.get("selection_output", {}).get("选型输出", {})
+        power_details = power_results.get("calculation_details", {}).get("计算过程详情", {})
+        
+        # 提取关键数据
+        power_output = aspen_sim.get('power_output', 654)
+        net_power = power_details.get("2_公用功耗", {}).get("净发电功率", "654.0 kW").replace(" kW", "")
+        annual_power = power_details.get("3_经济性分析", {}).get("年发电量", "525.6 万kWh").replace(" 万kWh", "")
+        annual_income = power_details.get("3_经济性分析", {}).get("年发电收益", "315.36 万元").replace(" 万元", "")
+        coal_savings = power_details.get("3_经济性分析", {}).get("年节约标煤", "184.0 万吨").replace(" 万吨", "")
+        co2_reduction = power_details.get("3_经济性分析", {}).get("年CO2减排量", "505.4 万吨").replace(" 万吨", "")
+        
+        # 机组参数
+        unit_params = power_selection.get("机组参数", {})
+        unit_model = unit_params.get("机组型号", "TRT-1000")
+        unit_dimensions = unit_params.get("机组尺寸", "8.5×3.2×3.8")
+        unit_weight = unit_params.get("机组重量", "12000")
+        
+        # 技术参数
+        tech_params = power_selection.get("技术参数", {})
+        max_gas_flow = request.gas_flow_rate  # scmh -> m³/d
+        inlet_pressure = request.inlet_pressure * 10  # MPaA -> MPaG 
+        avg_inlet_temp = request.inlet_temperature
+        outlet_pressure = request.outlet_pressure * 10  # MPaA -> MPaG
+        exhaust_temp = tech_params.get("进/排气温度(°C)", "25/45").split("/")[-1] or "45"
+        
+        # 公用工程参数 - 使用 UtilityParams 类的属性值
+        utility_params_data = power_details.get("2_公用功耗", {})
+        
+        # 创建 UtilityParams 实例获取标准参数值
+        utility_params_config = UtilityParams()
+        
+        # 设备功率参数 - 直接使用 UtilityParams 的属性值
+        oil_pump_power = str(utility_params_config.lubrication_pump_power)        # 辅油泵功率 (kW)
+        heater_power = str(utility_params_config.lubrication_heater_power)        # 润滑油电加热器功率 (kW) 
+        separator_power = "8"         # 油雾分离器功率 (kW) - UtilityParams中无对应项，保持固定值
+        space_heater_power = str(utility_params_config.generator_heater_power)    # 发电机加热器功率 (kW)
+        plc_power = str(utility_params_config.plc_power)                         # PLC柜功率 (kW)
+        
+        # 流量参数 - 直接使用 UtilityParams 的属性值
+        oil_cooler_flow = "850"       # 油冷器流量 (m³/Hr) - 从计算结果获取
+        lubrication_flow = str(int(utility_params_config.lubrication_oil_flow_rate))  # 润滑油流量 (L/min)
+        nitrogen_flow = str(utility_params_config.air_demand_nm3_per_h)           # 氮气流量 (Nm³/h)
+        compressed_air_demand = str(utility_params_config.air_demand_nm3)         # 压缩空气流量 (Nm³/h)
+        
+        # 尝试从实际计算结果中获取更精确的值
+        lubrication_oil_amount = utility_params_data.get("润滑油量", "")
+        if lubrication_oil_amount:
+            try:
+                # 提取数值部分
+                oil_amount_str = str(lubrication_oil_amount).replace("L", "").strip()
+                oil_amount_value = float(oil_amount_str)
+                # 可以根据实际油量调整流量，但这里保持UtilityParams的标准值
+                logger.info(f"润滑油量（计算值）: {oil_amount_value}L")
+            except:
+                pass
+        
+        # 尝试从油冷器循环冷却水计算中获取数值  
+        oil_cooler_water = utility_params_data.get("油冷器循环冷却水", "")
+        if oil_cooler_water:
+            try:
+                # 提取数值部分并使用实际计算值
+                water_str = str(oil_cooler_water).replace("m³/h", "").replace("m³/Hr", "").strip()
+                water_value = float(water_str)
+                oil_cooler_flow = str(int(water_value))  # 直接使用计算的循环水量
+                logger.info(f"油冷器循环水量（计算值）: {water_value} m³/Hr")
+            except:
+                pass
+        
+        # 创建参数映射字典，将仿真结果映射到auto_aspen参数
+        parameters = {
+            # 接入参数 - 天然气处理机组
+            "auto_aspen_1": str(int(max_gas_flow * 24)),  # 最大气量 (m³/d)
+            "auto_aspen_2": str(inlet_pressure),          # 进站压力 (MPaG)
+            "auto_aspen_3": str(avg_inlet_temp),          # 平均进气温度 (℃)
+            "auto_aspen_4": str(outlet_pressure),         # 出站压力 (MPaG)
+            
+            # 段落中的参数
+            "auto_aspen_5": str(int(float(net_power))),   # 净发电功率 (kW)
+            
+            # 机组参数表
+            "auto_aspen_6": "1",                          # 透平机头数
+            "auto_aspen_7": unit_model,                   # 机组型号
+            "auto_aspen_8": "1",                          # 级数
+            "auto_aspen_9": str(exhaust_temp),            # 机组排气温度 (℃)
+            
+            # 机组占地面积与操作重量
+            "auto_aspen_10": f"{unit_model}-EX",          # 机组型号
+            "auto_aspen_11": unit_dimensions,             # 机组整体外形尺寸 (长×宽×高 m)
+            "auto_aspen_12": str(unit_weight),            # 机组整体重量/整体维修保养最大重量 (kg)
+            
+            # 项目整体经济效益核算
+            "auto_aspen_13": str(float(annual_power)),    # 年净发电量 (×10⁴kWh)
+            "auto_aspen_14": str(float(annual_income)),   # 年净发电收益 (万元)
+            "auto_aspen_15": str(float(coal_savings) * 10000),  # 年节约标准煤 (吨)
+            "auto_aspen_16": str(float(co2_reduction) * 10000), # 年减少CO₂排放 (吨)
+            
+            # 机组公用工程 - 电源设备参数
+            "auto_aspen_17": oil_pump_power,              # 辅油泵功率 (kW)
+            "auto_aspen_18": heater_power,                # 润滑油电加热器功率 (kW)
+            "auto_aspen_19": separator_power,             # 油雾分离器功率 (kW)
+            "auto_aspen_20": space_heater_power,          # 发电机加热器=空间加热器功率 (kW)
+            "auto_aspen_21": plc_power,                   # PLC柜功率 (kW)
+            
+            # 机组公用工程 - 水油气参数
+            "auto_aspen_22": oil_cooler_flow,             # 油冷器流量 (m³/Hr)
+            "auto_aspen_23": lubrication_flow,            # 齿轮箱润滑油流量 (L/min)
+            "auto_aspen_24": nitrogen_flow,               # 氮气-干气密封气体流量 (Nm³/h)
+            "auto_aspen_25": compressed_air_demand,       # 压缩空气-气动阀气体流量 (Nm³/h)
+        }
+        
+        # 生成时间戳文件名
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]  # 毫秒精度
+        output_name = f"technical_report_{timestamp}"
+        
+        # 输出公用工程参数用于调试
+        logger.info(f"公用工程参数配置（来源：UtilityParams）:")
+        logger.info(f"  辅油泵功率: {oil_pump_power} kW （UtilityParams.lubrication_pump_power）")
+        logger.info(f"  润滑油电加热器功率: {heater_power} kW （UtilityParams.lubrication_heater_power）") 
+        logger.info(f"  油雾分离器功率: {separator_power} kW （固定值）")
+        logger.info(f"  发电机加热器功率: {space_heater_power} kW （UtilityParams.generator_heater_power）")
+        logger.info(f"  PLC柜功率: {plc_power} kW （UtilityParams.plc_power）")
+        logger.info(f"  油冷器流量: {oil_cooler_flow} m³/Hr （计算值或默认值）")
+        logger.info(f"  润滑油流量: {lubrication_flow} L/min （UtilityParams.lubrication_oil_flow_rate）")
+        logger.info(f"  氮气流量: {nitrogen_flow} Nm³/h （UtilityParams.air_demand_nm3_per_h）")
+        logger.info(f"  空气需求量: {compressed_air_demand} Nm³/h （UtilityParams.air_demand_nm3）")
+        
+        # 生成文档
+        logger.info(f"正在生成技术文档，参数数量: {len(parameters)}")
+        result = generate_document(
+            parameters=parameters,
+            output_name=output_name,
+            convert_pdf=False,  # 暂时关闭PDF转换
+            preserve_formatting=True  # 保持格式
+        )
+        
+        if result["success"]:
+            # 构建文档下载地址
+            docx_filename = f"{output_name}.docx"
+            docx_url = f"/static/re/{docx_filename}"
+            
+            document_urls = {
+                "docx": docx_url
+            }
+            
+            # 如果有PDF文件也添加到下载地址中
+            if result.get("pdf_path"):
+                pdf_filename = f"{output_name}.pdf"
+                pdf_url = f"/static/re/{pdf_filename}"
+                document_urls["pdf"] = pdf_url
+            
+            return {
+                "success": True,
+                "document_urls": document_urls,
+                "parameters_count": len(parameters),
+                "generated_files": {
+                    "docx_path": result["docx_path"],
+                    "pdf_path": result.get("pdf_path")
+                }
+            }
+        else:
+            return {
+                "success": False,
+                "error": result.get("error", "文档生成失败")
+            }
+            
+    except Exception as e:
+        logger.error(f"生成技术文档失败: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+
 def generate_diagram_file(power_results: Dict[str, Any]) -> Dict[str, Any]:
     """
     生成机组布局图并保存为文件
@@ -620,7 +814,7 @@ def generate_diagram_file(power_results: Dict[str, Any]) -> Dict[str, Any]:
         }
 
 
-def create_combined_results(aspen_results: Dict[str, Any], power_results: Dict[str, Any], request: SimulationRequest) -> Dict[str, Any]:
+def create_combined_results(aspen_results: Dict[str, Any], power_results: Dict[str, Any], request: SimulationRequest, document_urls: Dict[str, str] = None) -> Dict[str, Any]:
     """创建综合结果"""
     try:
         # 提取关键数据
@@ -652,7 +846,8 @@ def create_combined_results(aspen_results: Dict[str, Any], power_results: Dict[s
             },
             "机组选型结果": power_selection,
             "经济性分析": power_details.get("计算过程详情", {}).get("3_经济性分析", {}),
-            "验证结果": power_results.get("validation_results", {})
+            "验证结果": power_results.get("validation_results", {}),
+            "文档下载": document_urls if document_urls else {}
         }
         
         return combined

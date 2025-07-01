@@ -45,7 +45,7 @@ class UtilityParams:
     bearing_power: float = 0  # 电磁轴承功率
     
     # 流体需求参数
-    air_demand_nm3: float = 4  # 空气需求量 (Nm³/s)
+    air_demand_nm3: float = 4  # 空气需求量 (Nm³/h)
     air_demand_nm3_per_h: float = 40  # 氮气需求量 (Nm³/h)
     
     # 其他参数
