@@ -808,11 +808,52 @@ def generate_diagram_file(power_results: Dict[str, Any]) -> Dict[str, Any]:
             logger.error(f"无法导入draw模块: {str(e)}")
             return {"success": False, "error": f"draw模块导入失败: {str(e)}"}
         
+        # 获取净发电功率（优先从功率分配中获取，然后从选型输出，最后从计算详情获取）
+        net_power = 0
+        
+        # 调试信息：打印所有可用的字段
+        logger.info(f"🔍 调试信息 - power_distribution 字段: {list(power_distribution.keys()) if power_distribution else '空'}")
+        logger.info(f"🔍 调试信息 - selection_output 字段: {list(selection_output.keys()) if selection_output else '空'}")
+        
+        try:
+            # 方式1: 从功率分配中获取（双级设计）
+            if power_distribution and "总净发电功率" in power_distribution:
+                net_power_str = power_distribution.get("总净发电功率", "0")
+                net_power = float(str(net_power_str).replace("kW", "").strip())
+                logger.info(f"✅ 从功率分配获取净发电功率: {net_power} kW")
+            
+            # 方式2: 从选型输出中获取（单级和双级通用）
+            elif "净发电功率" in selection_output:
+                net_power_str = selection_output.get("净发电功率", "0")
+                net_power = float(str(net_power_str).replace("kW", "").strip())
+                logger.info(f"✅ 从选型输出获取净发电功率: {net_power} kW")
+            
+            # 方式3: 从计算详情中获取
+            else:
+                utility_power_data = calculation_details.get("2_公用功耗", {})
+                logger.info(f"🔍 调试信息 - 公用功耗数据字段: {list(utility_power_data.keys()) if utility_power_data else '空'}")
+                
+                if "净发电功率" in utility_power_data:
+                    net_power_str = utility_power_data.get("净发电功率", "0")
+                    net_power = float(str(net_power_str).replace("kW", "").replace(" kW", "").strip())
+                    logger.info(f"✅ 从计算详情获取净发电功率: {net_power} kW")
+                else:
+                    logger.warning("⚠️ 无法从任何来源获取净发电功率，使用默认值0")
+                    
+            # 确保净发电功率不为负数或过小
+            if net_power <= 0:
+                logger.warning(f"⚠️ 净发电功率为 {net_power}，可能数据有误，尝试使用默认值100kW")
+                net_power = 100  # 使用一个合理的默认值
+                
+        except Exception as e:
+            logger.error(f"❌ 解析净发电功率时出错: {str(e)}，使用默认值100kW")
+            net_power = 100
+        
         # 根据设计类型生成图像
         width_pixels = int(unit_dimensions[0] * 100)  # 长度×100
         height_pixels = int(unit_dimensions[1] * 100)  # 宽度×100
-        total_power = float(power_distribution.get("总净发电功率", "0").replace("kW", ""))
-        img = draw(outer_size=(width_pixels, height_pixels) ,net_power=int(total_power))
+        logger.info(f"生成机组布局图 - 净发电功率: {int(net_power)} kW, 尺寸: {width_pixels}x{height_pixels}")
+        img = draw(outer_size=(width_pixels, height_pixels), net_power=int(net_power))
         # 生成时间戳文件名
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]  # 毫秒精度
         filename = f"diagram_{timestamp}.png"
