@@ -718,7 +718,7 @@ def generate_technical_document(aspen_results: Dict[str, Any], power_results: Di
             parameters=parameters,
             output_name=output_name,
             convert_pdf=False,  # 暂时关闭PDF转换
-            preserve_formatting=True  # 保持格式
+            preserve_formatting=False  # 保持格式
         )
         
         if result["success"]:
