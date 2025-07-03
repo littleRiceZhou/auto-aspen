@@ -182,7 +182,12 @@ async def run_comprehensive_simulation(request: SimulationRequest):
         
         # Step 4: 生成技术文档
         logger.info("Step 4: 生成技术文档")
-        document_result = generate_technical_document(aspen_results, power_results, request)
+        # 从机组布局图结果中获取文件路径
+        diagram_file_path = None
+        if diagram_result["success"]:
+            diagram_file_path = diagram_result.get("file_path")
+            
+        document_result = generate_technical_document(aspen_results, power_results, request, diagram_file_path)
         document_urls = None
         if document_result["success"]:
             document_urls = document_result["document_urls"]
@@ -579,7 +584,7 @@ async def run_power_calculation_internal(main_power: float, aspen_results: Dict[
         }
 
 
-def generate_technical_document(aspen_results: Dict[str, Any], power_results: Dict[str, Any], request: SimulationRequest) -> Dict[str, Any]:
+def generate_technical_document(aspen_results: Dict[str, Any], power_results: Dict[str, Any], request: SimulationRequest, diagram_file_path: str = None) -> Dict[str, Any]:
     """
     生成技术文档（DOCX格式）
     """
@@ -712,10 +717,25 @@ def generate_technical_document(aspen_results: Dict[str, Any], power_results: Di
         logger.info(f"  氮气流量: {nitrogen_flow} Nm³/h （UtilityParams.air_demand_nm3_per_h）")
         logger.info(f"  空气需求量: {compressed_air_demand} Nm³/h （UtilityParams.air_demand_nm3）")
         
+        # 准备机组布局图替换
+        text_to_images = None
+        if diagram_file_path and os.path.exists(diagram_file_path):
+            text_to_images = {
+                "auto_aspen_image_1": {
+                    "image_path": diagram_file_path,
+                    "width": 6.0,
+                    "height": 4.0
+                }
+            }
+            logger.info(f"准备将机组布局图插入文档: {diagram_file_path}")
+        else:
+            logger.warning(f"机组布局图不存在或路径无效: {diagram_file_path}")
+        
         # 生成文档
         logger.info(f"正在生成技术文档，参数数量: {len(parameters)}")
         result = generate_document(
             parameters=parameters,
+            text_to_images=text_to_images,
             output_name=output_name,
             convert_pdf=False,  # 暂时关闭PDF转换
             preserve_formatting=False  # 保持格式
@@ -736,10 +756,18 @@ def generate_technical_document(aspen_results: Dict[str, Any], power_results: Di
                 pdf_url = f"/static/re/{pdf_filename}"
                 document_urls["pdf"] = pdf_url
             
+            # 记录图片替换结果
+            text_to_image_count = result.get("text_to_image_replaced", 0)
+            if text_to_image_count > 0:
+                logger.info(f"✅ 成功在文档中替换了 {text_to_image_count} 个图片占位符")
+            else:
+                logger.warning("⚠️ 未在文档中找到图片占位符或替换失败")
+            
             return {
                 "success": True,
                 "document_urls": document_urls,
                 "parameters_count": len(parameters),
+                "text_to_image_replaced": text_to_image_count,
                 "generated_files": {
                     "docx_path": result["docx_path"],
                     "pdf_path": result.get("pdf_path")
