@@ -21,6 +21,7 @@
             color: #000000;
             min-height: 100vh;
             overflow-x: hidden;
+            width: 100%;
         }
 
         .container {
@@ -28,6 +29,9 @@
             flex-direction: column;
             min-height: 100vh;
             position: relative;
+            width: 100%;
+            max-width: 100vw;
+            overflow-x: hidden;
         }
 
         /* 顶部区域 */
@@ -41,6 +45,10 @@
             justify-content: space-between;
             min-height: 85px;
             gap: 1.5rem;
+            width: 100%;
+            max-width: 100vw;
+            overflow-x: hidden;
+            box-sizing: border-box;
         }
 
         .logo-container {
@@ -73,12 +81,16 @@
             gap: 1rem;
             flex-wrap: wrap;
             flex: 0 0 auto;
+            min-width: 0;
+            max-width: 100%;
         }
 
         .config-buttons {
             display: flex;
             gap: 1rem;
             flex-wrap: wrap;
+            min-width: 0;
+            max-width: 100%;
         }
 
         .config-btn {
@@ -168,7 +180,7 @@
             width: 100%;
             height: 100%;
             background: rgba(0, 0, 0, 0.5);
-            backdrop-filter: blur(5px);
+            /* 移除 backdrop-filter 以提高性能 */
         }
 
         .modal.show {
@@ -418,11 +430,12 @@
             height: 100%;
             background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
             animation: loading-sweep 2s infinite;
+            will-change: transform;
         }
 
         @keyframes loading-sweep {
-            0% { left: -100%; }
-            100% { left: 100%; }
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
         }
 
         /* 右侧结果面板 */
@@ -431,6 +444,10 @@
             padding: 2.5rem;
             background: rgba(225, 227, 228, 0.6);
             overflow-y: auto;
+            overflow-x: hidden;
+            width: 100%;
+            max-width: 100vw;
+            box-sizing: border-box;
         }
 
 
@@ -445,6 +462,9 @@
             position: relative;
             overflow: hidden;
             box-shadow: 0 4px 20px rgba(30, 144, 255, 0.1);
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
         }
 
         .result-card::before {
@@ -491,8 +511,11 @@
 
         .result-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 1.2rem;
+            width: 100%;
+            max-width: 100%;
+            overflow-x: hidden;
         }
 
         .result-item {
@@ -515,7 +538,7 @@
             color: #000000;
             margin-bottom: 0.5rem;
             font-weight: 600;
-            text-transform: uppercase;
+            /* text-transform: uppercase; */
             letter-spacing: 0.5px;
         }
 
@@ -726,7 +749,7 @@
             }
 
             .result-grid {
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
             }
         }
 
@@ -814,14 +837,14 @@
             .config-btn {
                 font-size: 0.75rem;
                 padding: 0.4rem 0.8rem;
+                white-space: nowrap;
             }
 
             .simulation-btn {
                 font-size: 0.85rem;
                 padding: 0.6rem 1.2rem;
+                white-space: nowrap;
             }
-
-
 
             .result-panel {
                 padding: 1rem;
@@ -831,7 +854,14 @@
                 padding: 1.5rem;
             }
 
+            .result-grid {
+                grid-template-columns: 1fr;
+                gap: 1rem;
+            }
 
+            .result-item {
+                padding: 1rem;
+            }
         }
     </style>
 </head>
@@ -963,79 +993,79 @@
                             <div class="form-group">
                                 <label class="form-label" for="ch4">CH₄ (甲烷)</label>
                                 <input type="number" id="ch4" name="CH4" class="form-input" 
-                                       value="" min="0" max="100" step="0.1" required>
+                                       value="0" min="0" max="100" step="0.1" required>
                             </div>
 
                             <div class="form-group">
                                 <label class="form-label" for="c2h6">C₂H₆ (乙烷)</label>
                                 <input type="number" id="c2h6" name="C2H6" class="form-input" 
-                                       value="" min="0" max="100" step="0.1" required>
+                                       value="0" min="0" max="100" step="0.1" required>
                             </div>
 
                             <div class="form-group">
                                 <label class="form-label" for="c3h8">C₃H₈ (丙烷)</label>
                                 <input type="number" id="c3h8" name="C3H8" class="form-input" 
-                                       value="" min="0" max="100" step="0.1" required>
+                                       value="0" min="0" max="100" step="0.1" required>
                             </div>
 
                             <div class="form-group">
                                 <label class="form-label" for="c4h10">C₄H₁₀ (丁烷)</label>
                                 <input type="number" id="c4h10" name="C4H10" class="form-input" 
-                                       value="" min="0" max="100" step="0.1" required>
+                                       value="0" min="0" max="100" step="0.1" required>
                             </div>
 
                             <div class="form-group">
                                 <label class="form-label" for="n2">N₂ (氮气)</label>
                                 <input type="number" id="n2" name="N2" class="form-input" 
-                                       value="" min="0" max="100" step="0.1" required>
+                                       value="0" min="0" max="100" step="0.1" required>
                             </div>
 
                             <div class="form-group">
                                 <label class="form-label" for="co2">CO₂ (二氧化碳)</label>
                                 <input type="number" id="co2" name="CO2" class="form-input" 
-                                       value="" min="0" max="100" step="0.1" required>
+                                       value="0" min="0" max="100" step="0.1" required>
                             </div>
 
                             <div class="form-group">
                                 <label class="form-label" for="h2s">H₂S (硫化氢)</label>
                                 <input type="number" id="h2s" name="H2S" class="form-input" 
-                                       value="" min="0" max="100" step="0.1" required>
+                                       value="0" min="0" max="100" step="0.1" required>
                             </div>
 
                             <div class="form-group">
                                 <label class="form-label" for="o2">O₂ (氧气)</label>
                                 <input type="number" id="o2" name="O2" class="form-input" 
-                                       value="" min="0" max="100" step="0.1" required>
+                                       value="0" min="0" max="100" step="0.1" required>
                             </div>
 
                             <div class="form-group">
                                 <label class="form-label" for="h2">H₂ (氢气)</label>
                                 <input type="number" id="h2" name="H2" class="form-input" 
-                                       value="" min="0" max="100" step="0.1" required>
+                                       value="0" min="0" max="100" step="0.1" required>
                             </div>
 
                             <div class="form-group">
                                 <label class="form-label" for="h2o">H₂O (水)</label>
                                 <input type="number" id="h2o" name="H2O" class="form-input" 
-                                       value="" min="0" max="100" step="0.1" required>
+                                       value="0" min="0" max="100" step="0.1" required>
                             </div>
 
                             <div class="form-group">
                                 <label class="form-label" for="he">He (氦气)</label>
                                 <input type="number" id="he" name="HE" class="form-input" 
-                                       value="" min="0" max="100" step="0.1" required>
+                                       value="0" min="0" max="100" step="0.1" required>
                             </div>
 
                             <div class="form-group">
                                 <label class="form-label" for="c2h2">C₂H₂ (乙炔)</label>
                                 <input type="number" id="c2h2" name="C2H2" class="form-input" 
-                                       value="" min="0" max="100" step="0.1" required>
+                                       value="0" min="0" max="100" step="0.1" required>
                             </div>
 
                             <div class="form-group">
                                 <label class="form-label" for="c2h4">C₂H₄ (乙烯)</label>
                                 <input type="number" id="c2h4" name="C2H4" class="form-input" 
-                                       value="" min="0" max="100" step="0.1" required>
+                                       value="0" min="0" max="100" step="0.1" required>
                             </div>
                         </div>
                         
@@ -1082,24 +1112,24 @@
             <div id="resultContent" style="display: none;">
                 <!-- 仿真概况 -->
                 <div class="result-card">
-                    <h3 class="card-title">仿真概况</h3>
+                    <h3 class="card-title">📈 仿真概况</h3>
                     <div class="result-grid">
                         <div class="result-item">
-                            <div class="result-label">总体状态</div>
+                            <div class="result-label">🎯 总体状态</div>
                             <div class="result-value" id="overallStatus">
                                 <span class="status-indicator status-success">成功</span>
                             </div>
                         </div>
                         <div class="result-item">
-                            <div class="result-label">ASPEN仿真</div>
+                            <div class="result-label">🔬 ASPEN仿真</div>
                             <div class="result-value" id="aspenStatus">等待中</div>
                         </div>
                         <div class="result-item">
-                            <div class="result-label">功率计算</div>
+                            <div class="result-label">⚡ 功率计算</div>
                             <div class="result-value" id="powerStatus">等待中</div>
                         </div>
                         <div class="result-item">
-                            <div class="result-label">仿真时间</div>
+                            <div class="result-label">⏱️ 仿真时间</div>
                             <div class="result-value" id="simulationTime">计算中</div>
                         </div>
                     </div>
@@ -1107,30 +1137,26 @@
 
                 <!-- ASPEN仿真结果 -->
                 <div class="result-card">
-                    <h3 class="card-title">ASPEN仿真结果</h3>
+                    <h3 class="card-title">📊 ASPEN仿真结果</h3>
                     <div class="result-grid">
                         <div class="result-item">
-                            <div class="result-label">功率输出</div>
+                            <div class="result-label">⚡ 功率输出</div>
                             <div class="result-value" id="powerOutput">计算中</div>
                         </div>
                         <div class="result-item">
-                            <div class="result-label">入口条件</div>
+                            <div class="result-label">⚙️ 设计参数</div>
                             <div class="result-value" id="inletConditions">分析中</div>
                         </div>
                         <div class="result-item">
-                            <div class="result-label">出口条件</div>
+                            <div class="result-label">🔧 出口条件</div>
                             <div class="result-value" id="outletConditions">分析中</div>
-                        </div>
-                        <div class="result-item">
-                            <div class="result-label">性能指标</div>
-                            <div class="result-value" id="performanceMetrics">评估中</div>
                         </div>
                     </div>
                 </div>
 
                 <!-- 机组选型结果 -->
                 <div class="result-card">
-                    <h3 class="card-title">机组选型结果</h3>
+                    <h3 class="card-title">🏭 机组选型结果</h3>
                     <div id="unitSelectionGrid" class="result-grid">
                         <!-- 动态生成 -->
                     </div>
@@ -1138,7 +1164,7 @@
 
                 <!-- 经济性分析 -->
                 <div class="result-card">
-                    <h3 class="card-title">经济性分析</h3>
+                    <h3 class="card-title">💰 经济性分析</h3>
                     <div id="economicGrid" class="result-grid">
                         <!-- 动态生成 -->
                     </div>
@@ -1146,7 +1172,7 @@
 
                 <!-- 文档下载 -->
                 <div class="result-card">
-                    <h3 class="card-title">技术文档下载</h3>
+                    <h3 class="card-title">📄 技术文档下载</h3>
                     <div id="documentDownloadContent" class="download-container">
                         <div class="empty-state">
                             <h3>等待生成技术文档</h3>
@@ -1157,7 +1183,7 @@
 
                 <!-- 机组布局图 -->
                 <div class="result-card">
-                    <h3 class="card-title">机组布局示意图</h3>
+                    <h3 class="card-title">🏗️ 机组布局示意图</h3>
                     <div id="diagramContent" class="diagram-container">
                         <div class="empty-state">
                             <h3>等待生成布局图</h3>
@@ -1174,20 +1200,23 @@
         function openModal(modalId) {
             const modal = document.getElementById(modalId);
             modal.classList.add('show');
-            document.body.style.overflow = 'hidden';
+            // 保持 overflow-x: hidden，只改变 overflow-y
+            document.body.style.overflowY = 'hidden';
         }
 
         function closeModal(modalId) {
             const modal = document.getElementById(modalId);
             modal.classList.remove('show');
-            document.body.style.overflow = 'auto';
+            // 恢复 overflow-y，保持 overflow-x: hidden
+            document.body.style.overflowY = 'auto';
         }
 
         // 点击外部关闭弹窗
         document.addEventListener('click', function(e) {
             if (e.target.classList.contains('modal')) {
                 e.target.classList.remove('show');
-                document.body.style.overflow = 'auto';
+                // 恢复 overflow-y，保持 overflow-x: hidden
+                document.body.style.overflowY = 'auto';
             }
         });
 
@@ -1228,10 +1257,7 @@
                 return;
             }
             
-            if (parseFloat(inletPressure) <= parseFloat(outletPressure)) {
-                alert('入口压力应大于出口压力');
-                return;
-            }
+
             
             closeModal('pressureModal');
             showConfigStatus('压力温度', '已配置');
@@ -1343,38 +1369,51 @@
         }
 
         function showLoading() {
-            document.getElementById('emptyState').style.display = 'none';
-            document.getElementById('resultContent').style.display = 'none';
-            document.getElementById('loadingState').style.display = 'flex';
-            
-            const submitBtn = document.querySelector('.simulation-btn');
-            const btnText = document.getElementById('btnText');
-            
-            submitBtn.disabled = true;
-            submitBtn.classList.add('loading');
-            btnText.textContent = '仿真计算中...';
+            // 使用 requestAnimationFrame 来确保平滑过渡
+            requestAnimationFrame(() => {
+                document.getElementById('emptyState').style.display = 'none';
+                document.getElementById('resultContent').style.display = 'none';
+                document.getElementById('loadingState').style.display = 'flex';
+                
+                const submitBtn = document.querySelector('.simulation-btn');
+                const btnText = document.getElementById('btnText');
+                
+                submitBtn.disabled = true;
+                submitBtn.classList.add('loading');
+                btnText.textContent = '仿真计算中...';
+            });
         }
 
         function hideLoading() {
-            document.getElementById('loadingState').style.display = 'none';
-            
-            const submitBtn = document.querySelector('.simulation-btn');
-            const btnText = document.getElementById('btnText');
-            
-            submitBtn.disabled = false;
-            submitBtn.classList.remove('loading');
-            btnText.textContent = '开始仿真计算';
+            // 使用 requestAnimationFrame 来确保平滑过渡
+            requestAnimationFrame(() => {
+                document.getElementById('loadingState').style.display = 'none';
+                
+                const submitBtn = document.querySelector('.simulation-btn');
+                const btnText = document.getElementById('btnText');
+                
+                submitBtn.disabled = false;
+                submitBtn.classList.remove('loading');
+                btnText.textContent = '开始仿真计算';
+            });
         }
 
         function displayResults(result) {
             hideLoading();
             
-            document.getElementById('emptyState').style.display = 'none';
-            document.getElementById('resultContent').style.display = 'block';
+            // 添加调试信息 - 显示完整的结果数据
+            console.log('完整结果数据:', result);
+            
+            // 使用 requestAnimationFrame 来确保平滑过渡，防止页面跳动
+            requestAnimationFrame(() => {
+                document.getElementById('emptyState').style.display = 'none';
+                document.getElementById('resultContent').style.display = 'block';
 
             // 显示仿真概况
             const combined = result.combined_results || {};
             const overview = combined['仿真概况'] || {};
+            
+            console.log('仿真概况数据:', overview);
             
             document.getElementById('overallStatus').innerHTML = 
                 `<span class="status-indicator ${overview['总体状态'] === '成功' ? 'status-success' : 'status-error'}">${overview['总体状态'] || '未知'}</span>`;
@@ -1386,16 +1425,80 @@
 
             // 显示ASPEN仿真结果
             const aspenResults = combined['ASPEN仿真结果'] || {};
+            console.log('ASPEN仿真结果完整数据:', aspenResults);
+            console.log('完整数据结构:', result);
+            
             document.getElementById('powerOutput').textContent = aspenResults['功率输出'] || '未获取';
             
-            // 格式化条件显示 - 使用新的详细显示方式
-            const inletConditions = aspenResults['入口条件'] || {};
-            const outletConditions = aspenResults['出口条件'] || {};
-            const performanceMetrics = aspenResults['性能指标'] || {};
+            // 从实际数据中构建ASPEN仿真结果的完整数据
+            let aspenSimulationData = {};
             
-            displayDetailedConditions('inletConditions', inletConditions, '入口条件');
-            displayDetailedConditions('outletConditions', outletConditions, '出口条件');
-            displayDetailedMetrics('performanceMetrics', performanceMetrics, '性能指标');
+            // 从combined_results.输入参数中获取数据
+            const inputParams = combined['输入参数'] || {};
+            
+            // 从aspen_results.simulation_results.parameters获取数据
+            let sourceParams = {};
+            if (result.aspen_results && result.aspen_results.simulation_results && result.aspen_results.simulation_results.parameters) {
+                sourceParams = result.aspen_results.simulation_results.parameters;
+            }
+            
+            // 构建完整的ASPEN仿真结果数据
+            aspenSimulationData = {
+                // 功率输出
+                power_output: aspenResults['功率输出'] ? parseFloat(aspenResults['功率输出'].replace(' kW', '')) : 
+                             (result.aspen_results?.simulation_results?.power_output || null),
+                
+                // 设计效率
+                efficiency: inputParams['设计效率'] ? parseFloat(inputParams['设计效率'].replace(' %', '')) : 
+                           (sourceParams.efficiency || null),
+                
+                // 入口压力 (MPaA)
+                inlet_pressure: inputParams['入口压力'] ? parseFloat(inputParams['入口压力'].replace(' MPaA', '')) : 
+                               (sourceParams.inlet_pressure || null),
+                
+                // 入口温度 (°C)
+                inlet_temperature: inputParams['入口温度'] ? parseFloat(inputParams['入口温度'].replace(' °C', '')) : 
+                                  (sourceParams.inlet_temperature || null),
+                
+                // 出口压力 (MPaA)
+                outlet_pressure: inputParams['出口压力'] ? parseFloat(inputParams['出口压力'].replace(' MPaA', '')) : 
+                                (sourceParams.outlet_pressure || null),
+                
+                // 气体流量 (从 scmh 转换为 Nm³/day)
+                gas_flow_rate_scmh: inputParams['气体流量'] ? parseFloat(inputParams['气体流量'].replace(' scmh', '')) : 
+                                   (sourceParams.gas_flow_rate || null),
+                
+                // 计算 Nm³/day (scmh * 24)
+                gas_flow_rate_nm3_day: null
+            };
+            
+            // 计算气体流量的 Nm³/day
+            if (aspenSimulationData.gas_flow_rate_scmh) {
+                aspenSimulationData.gas_flow_rate_nm3_day = aspenSimulationData.gas_flow_rate_scmh * 24;
+            }
+            
+            console.log('构建的ASPEN仿真结果数据:', aspenSimulationData);
+            
+            // 分模块显示ASPEN仿真结果
+            
+            // 1. 功率输出模块 - 显示功率输出
+            const powerOutputData = {
+                power_output: aspenSimulationData.power_output
+            };
+            displayPowerOutput('powerOutput', powerOutputData);
+            
+            // 2. 设计参数模块 - 显示设计效率和气体流量
+            const aspenCoreData = {
+                efficiency: aspenSimulationData.efficiency,
+                gas_flow_rate_nm3_day: aspenSimulationData.gas_flow_rate_nm3_day
+            };
+            displayAspenCoreResults('inletConditions', aspenCoreData, '设计参数');
+            
+            // 3. 出口条件模块 - 显示出口压力
+            const outletData = {
+                outlet_pressure: aspenSimulationData.outlet_pressure
+            };
+            displayOutletConditions('outletConditions', outletData, '出口条件');
 
             // 显示机组选型结果
             const selectionResults = combined['机组选型结果'] || {};
@@ -1411,6 +1514,7 @@
 
             // 显示机组布局图
             displayDiagram(result);
+            }); // 闭合 requestAnimationFrame
         }
 
         function formatConditions(conditions) {
@@ -1442,9 +1546,19 @@
             }
 
             const numValue = parseFloat(value);
-            const keyLower = key.toLowerCase();
             
-            // 检查是否包含需要格式化的关键词
+            // 如果key已经包含单位（通过括号判断），直接格式化数值，不添加单位
+            if (key.includes('(') && key.includes(')')) {
+                // 对于机组报价等整数值，不需要小数点
+                if (key.includes('报价') || key.includes('重量') || key.includes('尺寸')) {
+                    return Number.isInteger(numValue) ? numValue.toString() : numValue.toFixed(0);
+                }
+                // 对于其他数值，保留适当的小数位
+                return numValue.toFixed(2);
+            }
+            
+            // 兼容旧格式：如果key不包含单位，按原逻辑处理
+            const keyLower = key.toLowerCase();
             if (keyLower.includes('流量') || keyLower.includes('flow') ||
                 keyLower.includes('温度') || keyLower.includes('temperature') ||
                 keyLower.includes('压力') || keyLower.includes('pressure') ||
@@ -1453,7 +1567,6 @@
                 keyLower.includes('转速') || keyLower.includes('speed') ||
                 keyLower.includes('比率') || keyLower.includes('ratio') ||
                 keyLower.includes('收益') || keyLower.includes('return') ||
-                // 检查数值是否看起来像需要格式化的数值（有小数点且小数位数>2）
                 (typeof value === 'string' && value.includes('.') && value.split('.')[1].length > 2) ||
                 (typeof value === 'number' && !Number.isInteger(numValue))) {
                 
@@ -1465,42 +1578,37 @@
 
         function displayDetailedConditions(elementId, conditions, title) {
             const element = document.getElementById(elementId);
-            if (!conditions || Object.keys(conditions).length === 0) {
-                element.innerHTML = '<div style="color: #000000; font-style: italic;">暂无数据</div>';
-                return;
-            }
-
+            
+            console.log(`${title} 数据:`, conditions);
+            
             let html = '';
             
-            if (conditions.pressure !== undefined) {
-                html += `
-                    <div style="margin-bottom: 0.5rem;">
-                        <span style="color: #000000; font-size: 0.85rem;">压力：</span>
-                        <span style="color: #000000; font-weight: 600;">${parseFloat(conditions.pressure).toFixed(2)} bar</span>
-                    </div>
-                `;
-            }
-            
-            if (conditions.temperature !== undefined) {
-                html += `
-                    <div style="margin-bottom: 0.5rem;">
-                        <span style="color: #000000; font-size: 0.85rem;">温度：</span>
-                        <span style="color: #000000; font-weight: 600;">${parseFloat(conditions.temperature).toFixed(2)} °C</span>
-                    </div>
-                `;
-            }
-            
-            if (conditions.flow_rate !== undefined) {
-                html += `
-                    <div style="margin-bottom: 0.5rem;">
-                        <span style="color: #000000; font-size: 0.85rem;">流量：</span>
-                        <span style="color: #000000; font-weight: 600;">${parseFloat(conditions.flow_rate).toFixed(2)} kmol/hr</span>
-                    </div>
-                `;
+            if (conditions && typeof conditions === 'object' && Object.keys(conditions).length > 0) {
+                // 遍历所有字段，使用key作为标签（key已包含单位）
+                Object.entries(conditions).forEach(([key, value]) => {
+                    if (value !== undefined && value !== null && value !== '') {
+                        // 格式化数值，但不添加单位（因为key已包含单位）
+                        const displayValue = formatNumberValue(key, value);
+                        html += `
+                            <div style="margin-bottom: 0.5rem;">
+                                <span style="color: #000000; font-size: 0.85rem;">${key}：</span>
+                                <span style="color: #000000; font-weight: 600;">${displayValue}</span>
+                            </div>
+                        `;
+                    }
+                });
+            } else if (typeof conditions === 'string') {
+                // 如果是字符串，直接显示
+                html = `<div style="color: #000000; font-weight: 600;">${conditions}</div>`;
             }
 
+            // 最终显示
             if (html === '') {
-                element.innerHTML = '<div style="color: #000000; font-style: italic;">数据解析中</div>';
+                element.innerHTML = `
+                    <div style="color: #000000; font-style: italic;">
+                        暂无数据
+                    </div>
+                `;
             } else {
                 element.innerHTML = html;
             }
@@ -1508,42 +1616,34 @@
 
         function displayDetailedMetrics(elementId, metrics, title) {
             const element = document.getElementById(elementId);
-            if (!metrics || Object.keys(metrics).length === 0) {
-                element.innerHTML = '<div style="color: #000000; font-style: italic;">暂无数据</div>';
-                return;
-            }
-
+            
+            console.log(`${title} 数据:`, metrics);
+            
             let html = '';
             
-            if (metrics.efficiency !== undefined) {
-                html += `
-                    <div style="margin-bottom: 0.5rem;">
-                        <span style="color: #000000; font-size: 0.85rem;">效率：</span>
-                        <span style="color: #000000; font-weight: 600;">${(metrics.efficiency * 100).toFixed(2)}%</span>
-                    </div>
-                `;
-            }
-            
-            if (metrics.pressure_ratio !== undefined) {
-                html += `
-                    <div style="margin-bottom: 0.5rem;">
-                        <span style="color: #000000; font-size: 0.85rem;">压比：</span>
-                        <span style="color: #000000; font-weight: 600;">${metrics.pressure_ratio.toFixed(2)}</span>
-                    </div>
-                `;
-            }
-            
-            if (metrics.expansion_ratio !== undefined) {
-                html += `
-                    <div style="margin-bottom: 0.5rem;">
-                        <span style="color: #000000; font-size: 0.85rem;">膨胀比：</span>
-                        <span style="color: #000000; font-weight: 600;">${metrics.expansion_ratio.toFixed(2)}</span>
-                    </div>
-                `;
+            if (metrics && typeof metrics === 'object' && Object.keys(metrics).length > 0) {
+                // 遍历所有字段，使用key作为标签（key已包含单位）
+                Object.entries(metrics).forEach(([key, value]) => {
+                    if (value !== undefined && value !== null && value !== '') {
+                        // 格式化数值，但不添加单位（因为key已包含单位）
+                        const displayValue = formatNumberValue(key, value);
+                        html += `
+                            <div style="margin-bottom: 0.5rem;">
+                                <span style="color: #000000; font-size: 0.85rem;">${key}：</span>
+                                <span style="color: #000000; font-weight: 600;">${displayValue}</span>
+                            </div>
+                        `;
+                    }
+                });
             }
 
+            // 最终显示
             if (html === '') {
-                element.innerHTML = '<div style="color: #000000; font-style: italic;">数据解析中</div>';
+                element.innerHTML = `
+                    <div style="color: #000000; font-style: italic;">
+                        暂无数据
+                    </div>
+                `;
             } else {
                 element.innerHTML = html;
             }
@@ -1574,13 +1674,13 @@
                     let valueStyle = 'color: #000000;';
                     
                     // 为不同功率类型设置不同颜色
-                    if (key === '一级功率') {
+                    if (key.includes('一级功率')) {
                         itemStyle = 'border-left: 4px solid #1e90ff;';
                         valueStyle = 'color: #1e90ff; font-weight: 700;';
-                    } else if (key === '二级功率') {
+                    } else if (key.includes('二级功率')) {
                         itemStyle = 'border-left: 4px solid #4169e1;';
                         valueStyle = 'color: #4169e1; font-weight: 700;';
-                    } else if (key === '总净发电功率') {
+                    } else if (key.includes('总净发电功率')) {
                         itemStyle = 'border-left: 4px solid #00aa44;';
                         valueStyle = 'color: #00aa44; font-weight: 800;';
                     }
@@ -1597,20 +1697,31 @@
 
             // 机组参数
             Object.entries(unitParams).forEach(([key, value]) => {
-                console.log(key, value);
-                let formattedValue = ""
-                if (key == "机组尺寸"){
-                    formattedValue = value;
-                }else{
-                    formattedValue = formatNumberValue(key, value);
-                }
+                let itemStyle = '';
+                let valueStyle = 'color: #000000;';
                 
-                grid.innerHTML += `
-                    <div class="result-item">
-                        <div class="result-label">${key}</div>
-                        <div class="result-value">${formattedValue}</div>
-                    </div>
-                `;
+                // 为机组报价添加特殊样式
+                if (key.includes('报价')) {
+                    itemStyle = 'border-left: 4px solid #ff6b6b;';
+                    valueStyle = 'color: #ff6b6b; font-weight: 700;';
+                    // 机组报价显示为整数，添加"万元"
+                    const numValue = parseFloat(value);
+                    const formattedValue = Number.isInteger(numValue) ? `${numValue} 万元` : `${numValue.toFixed(0)} 万元`;
+                    grid.innerHTML += `
+                        <div class="result-item" style="${itemStyle}">
+                            <div class="result-label">${key}</div>
+                            <div class="result-value" style="${valueStyle}">${formattedValue}</div>
+                        </div>
+                    `;
+                } else {
+                    const formattedValue = formatNumberValue(key, value);
+                    grid.innerHTML += `
+                        <div class="result-item" style="${itemStyle}">
+                            <div class="result-label">${key}</div>
+                            <div class="result-value" style="${valueStyle}">${formattedValue}</div>
+                        </div>
+                    `;
+                }
             });
 
             // 技术参数
@@ -1624,14 +1735,30 @@
                 `;
             });
 
-            // 其他重要指标
-            ['净发电功率', '年收益率', '回报周期'].forEach(key => {
+            // 其他重要指标（如果存在且不在功率分配中）
+            const importantKeys = ['净发电功率(kW)', '年收益率(万元)', '回报周期(年)'];
+            importantKeys.forEach(key => {
                 if (data[key] && !powerDistribution.hasOwnProperty('总净发电功率')) {
+                    let itemStyle = '';
+                    let valueStyle = 'color: #000000;';
+                    
+                    // 为重要指标添加特殊样式
+                    if (key.includes('净发电功率')) {
+                        itemStyle = 'border-left: 4px solid #00aa44;';
+                        valueStyle = 'color: #00aa44; font-weight: 700;';
+                    } else if (key.includes('年收益率')) {
+                        itemStyle = 'border-left: 4px solid #1e90ff;';
+                        valueStyle = 'color: #1e90ff; font-weight: 700;';
+                    } else if (key.includes('回报周期')) {
+                        itemStyle = 'border-left: 4px solid #4169e1;';
+                        valueStyle = 'color: #4169e1; font-weight: 700;';
+                    }
+                    
                     const formattedValue = formatNumberValue(key, data[key]);
                     grid.innerHTML += `
-                        <div class="result-item">
+                        <div class="result-item" style="${itemStyle}">
                             <div class="result-label">${key}</div>
-                            <div class="result-value">${formattedValue}</div>
+                            <div class="result-value" style="${valueStyle}">${formattedValue}</div>
                         </div>
                     `;
                 }
@@ -1643,11 +1770,23 @@
             grid.innerHTML = '';
 
             Object.entries(data).forEach(([key, value]) => {
+                let itemStyle = '';
+                let valueStyle = 'color: #000000;';
+                
+                // 为不同类型的经济指标添加特殊样式
+                if (key.includes('年发电量') || key.includes('年收益')) {
+                    itemStyle = 'border-left: 4px solid #00aa44;';
+                    valueStyle = 'color: #00aa44; font-weight: 700;';
+                } else if (key.includes('节约') || key.includes('减排')) {
+                    itemStyle = 'border-left: 4px solid #1e90ff;';
+                    valueStyle = 'color: #1e90ff; font-weight: 700;';
+                }
+                
                 const formattedValue = formatNumberValue(key, value);
                 grid.innerHTML += `
-                    <div class="result-item">
+                    <div class="result-item" style="${itemStyle}">
                         <div class="result-label">${key}</div>
-                        <div class="result-value">${formattedValue}</div>
+                        <div class="result-value" style="${valueStyle}">${formattedValue}</div>
                     </div>
                 `;
             });
@@ -1666,7 +1805,7 @@
             if (result.document_urls && Object.keys(result.document_urls).length > 0) {
                 const selectionOutput = result.combined_results?.['机组选型结果']?.['选型输出'] || {};
                 const designType = selectionOutput['设计类型'] || '单级发电机组';
-                const netPower = selectionOutput['净发电功率'] || 'N/A';
+                const netPower = selectionOutput['净发电功率(kW)'] || 'N/A';
                 
                 let downloadButtons = '';
                 Object.entries(result.document_urls).forEach(([format, url]) => {
@@ -1724,15 +1863,15 @@
                     diagramInfo = `
                         <div class="diagram-info">
                             <h4>双级发电机组配置</h4>
-                            <p>一级功率：${powerDistribution['一级功率'] || 'N/A'} | 二级功率：${powerDistribution['二级功率'] || 'N/A'}</p>
-                            <p>总净发电功率：${powerDistribution['总净发电功率'] || 'N/A'}</p>
+                            <p>一级功率：${powerDistribution['一级功率(kW)'] || 'N/A'} | 二级功率：${powerDistribution['二级功率(kW)'] || 'N/A'}</p>
+                            <p>总净发电功率：${powerDistribution['总净发电功率(kW)'] || 'N/A'}</p>
                         </div>
                     `;
                 } else {
                     diagramInfo = `
                         <div class="diagram-info">
                             <h4>单级发电机组配置</h4>
-                            <p>净发电功率：${selectionOutput['净发电功率'] || 'N/A'}</p>
+                            <p>净发电功率：${selectionOutput['净发电功率(kW)'] || 'N/A'}</p>
                         </div>
                     `;
                 }
@@ -1825,11 +1964,7 @@
                 return result;
             }
             
-            if (inletPressure <= outletPressure) {
-                result.isValid = false;
-                result.message = '入口压力必须大于出口压力';
-                return result;
-            }
+
             
             if (inletTemperature === undefined || inletTemperature === null || inletTemperature === '') {
                 result.isValid = false;
@@ -1923,6 +2058,86 @@
                 this.title = `相当于 ${scmh.toFixed(2)} scmh`;
             }
         });
+
+        // 分模块显示函数
+        
+        // 1. 功率输出模块
+        function displayPowerOutput(elementId, data) {
+            const element = document.getElementById(elementId);
+            
+            if (data && data.power_output !== undefined && data.power_output !== null) {
+                element.textContent = `${parseFloat(data.power_output).toFixed(1)} kW`;
+            } else {
+                element.textContent = '未获取';
+            }
+        }
+        
+        // 2. ASPEN仿真结果核心模块 - 设计参数
+        function displayAspenCoreResults(elementId, data, title) {
+            const element = document.getElementById(elementId);
+            
+            console.log(`${title} 数据:`, data);
+            
+            let html = '';
+            
+            if (data && typeof data === 'object' && Object.keys(data).length > 0) {
+                // 设计效率 - 使用key包含单位的格式
+                if (data.efficiency !== undefined && data.efficiency !== null) {
+                    const effValue = parseFloat(data.efficiency);
+                    html += `
+                        <div style="margin-bottom: 0.5rem;">
+                            <span style="color: #000000; font-size: 0.85rem;">设计效率(%)：</span>
+                            <span style="color: #000000; font-weight: 600;">${effValue.toFixed(2)}</span>
+                        </div>
+                    `;
+                }
+                
+                // 气体流量 - 使用key包含单位的格式
+                if (data.gas_flow_rate_nm3_day !== undefined && data.gas_flow_rate_nm3_day !== null) {
+                    html += `
+                        <div style="margin-bottom: 0.5rem;">
+                            <span style="color: #000000; font-size: 0.85rem;">气体流量(Nm³/day)：</span>
+                            <span style="color: #000000; font-weight: 600;">${parseFloat(data.gas_flow_rate_nm3_day).toFixed(0)}</span>
+                        </div>
+                    `;
+                }
+            }
+
+            if (html === '') {
+                element.innerHTML = '<div style="color: #000000; font-style: italic;">暂无数据</div>';
+            } else {
+                element.innerHTML = html;
+            }
+        }
+        
+        // 3. 出口条件模块
+        function displayOutletConditions(elementId, data, title) {
+            const element = document.getElementById(elementId);
+            
+            console.log(`${title} 数据:`, data);
+            
+            let html = '';
+            
+            if (data && typeof data === 'object' && Object.keys(data).length > 0) {
+                // 出口压力 - 使用key包含单位的格式
+                if (data.outlet_pressure !== undefined && data.outlet_pressure !== null) {
+                    html += `
+                        <div style="margin-bottom: 0.5rem;">
+                            <span style="color: #000000; font-size: 0.85rem;">出口压力(MPa(A))：</span>
+                            <span style="color: #000000; font-weight: 600;">${parseFloat(data.outlet_pressure).toFixed(2)}</span>
+                        </div>
+                    `;
+                }
+            }
+
+            if (html === '') {
+                element.innerHTML = '<div style="color: #000000; font-style: italic;">暂无数据</div>';
+            } else {
+                element.innerHTML = html;
+            }
+        }
+        
+
     </script>
 </body>
 </html>

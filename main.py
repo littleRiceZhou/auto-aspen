@@ -301,13 +301,14 @@ async def run_aspen_simulation_internal(request: SimulationRequest) -> Dict[str,
             # 方式1: 从EXPANDER设备块获取功率数据
             if hasattr(result, 'blocks') and result.blocks:
                 expander_data = result.blocks.get('EXPANDER', {})
-                logger.info(f"EXPANDER设备块数据: {expander_data}")
+                logger.info(f"EXPANDER设备块数据字段: {list(expander_data.keys()) if expander_data else '无数据'}")
                 
                 # 尝试从不同的功率字段获取数据
                 power_fields = ['制动马力', '净功要求', '指示马力', '等熵功率']
                 for field in power_fields:
                     if field in expander_data:
                         field_data = expander_data[field]
+                        logger.info(f"找到功率字段 {field}: {field_data}")
                         if isinstance(field_data, dict) and 'value' in field_data:
                             power_value = field_data['value']
                             if power_value is not None:
@@ -405,6 +406,31 @@ async def run_aspen_simulation_internal(request: SimulationRequest) -> Dict[str,
             if simulation_time is None:
                 simulation_time = getattr(result, 'simulation_time', 0)
             
+            # 如果仍然没有获取到条件数据，使用输入参数构建基本条件信息
+            if not inlet_conditions or len(inlet_conditions) == 0:
+                inlet_conditions = {
+                    'pressure': request.inlet_pressure,
+                    'temperature': request.inlet_temperature,
+                    'flow_rate': request.gas_flow_rate
+                }
+                logger.info(f"使用输入参数构建入口条件: {inlet_conditions}")
+            
+            if not outlet_conditions or len(outlet_conditions) == 0:
+                outlet_conditions = {
+                    'pressure': request.outlet_pressure,
+                    'temperature': None,  # 出口温度需要通过仿真计算，这里设为None
+                    'flow_rate': request.gas_flow_rate
+                }
+                logger.info(f"使用输入参数构建出口条件: {outlet_conditions}")
+            
+            if not performance_metrics or len(performance_metrics) == 0:
+                performance_metrics = {
+                    'efficiency': request.efficiency,
+                    'power_output': power_output,
+                    'pressure_ratio': request.inlet_pressure / request.outlet_pressure if request.outlet_pressure > 0 else None
+                }
+                logger.info(f"使用输入参数构建性能指标: {performance_metrics}")
+            
             # 构建响应结果
             simulation_results = {
                 "success": result.success,
@@ -468,11 +494,11 @@ async def run_power_calculation_internal(main_power: float, aspen_results: Dict[
         net_power = utility_power['net_power_output']
         total_power = main_engine['total_power_generation']
         
-        if net_power > 1000:
-            # 双级设计 - 将净发电功率分配为两级
-            first_level_power = 1000  # 一级功率固定1000kW
-            second_level_power = net_power - 1000  # 二级功率 = 总净发电功率 - 一级功率
-            max_power = max(second_level_power, 1000)  # 机组选型功率按较大的级别计算
+        if total_power > 1000:
+            # 双级设计 - 将总功率除以2分配为两级
+            first_level_power = total_power / 2  # 一级功率 = 总功率/2
+            second_level_power = total_power / 2  # 二级功率 = 总功率/2
+            max_power = max(first_level_power, second_level_power)  # 机组选型功率按较大的级别计算
             
             # 按max_power重新计算机组选型（用于尺寸和重量）
             temp_calculator = PowerCalculations()
@@ -512,10 +538,9 @@ async def run_power_calculation_internal(main_power: float, aspen_results: Dict[
         
         # 构建技术参数（从ASPEN结果获取，而不是写死）
         technical_params = {
-            "进/排气压力(MPaa)": f"{parameters.get('inlet_pressure', 'N/A')}/{parameters.get('outlet_pressure', 'N/A')}",
+            "进/排气压力(MPaA)": f"{parameters.get('inlet_pressure', 'N/A')}/{parameters.get('outlet_pressure', 'N/A')}",
             "进/排气温度(°C)": f"{parameters.get('inlet_temperature', 'N/A')}/{outlet_conditions.get('temperature', 'N/A') if outlet_conditions else 'N/A'}",
-            "处理流量(scmh)": f"{parameters.get('gas_flow_rate', 'N/A')}",
-            "设备效率": f"{parameters.get('efficiency', 'N/A')}%" if parameters.get('efficiency') else "N/A",
+            "设备效率(%)": f"{parameters.get('efficiency', 'N/A')}" if parameters.get('efficiency') else "N/A",
             "功率输出(kW)": f"{aspen_sim_results.get('power_output', 'N/A')}"
         }
         
@@ -524,15 +549,15 @@ async def run_power_calculation_internal(main_power: float, aspen_results: Dict[
             "选型输出": {
                 "机组参数": {
                     "机组型号": f"TP{int(unit_selection['unit_selection'])}",
-                    "机组报价": int(unit_selection['unit_selection']),
+                    # "机组报价": int(unit_selection['unit_selection'] * 8.5),  # 按8.5万元/kW计算机组报价
                     "机组尺寸": f"{unit_selection['unit_dimensions'][0]}×{unit_selection['unit_dimensions'][1]}×{unit_selection['unit_dimensions'][2]}",
                     "机组重量": f"{unit_selection['unit_weight']}"
                 },
                 "技术参数": technical_params,  # 使用从ASPEN结果提取的参数
                 "设计类型": "双级发电机组" if is_dual_level else "单级发电机组",
-                "净发电功率": f"{utility_power['net_power_output']:.0f}kW",
-                "年收益率": f"{economic_analysis['annual_power_income']:.1f}万元",
-                "回报周期": f"{payback_period}年"
+                "净发电功率(kW)": f"{utility_power['net_power_output']:.0f}",
+                "年收益率(万元)": f"{economic_analysis['annual_power_income']:.1f}",
+                "回报周期(年)": f"{payback_period:.1f}"
             }
         }
         
@@ -541,59 +566,59 @@ async def run_power_calculation_internal(main_power: float, aspen_results: Dict[
             # 验证：总净发电功率 = 一级功率 + 二级功率
             calculated_total = first_level_power + second_level_power
             selection_output["选型输出"]["功率分配"] = {
-                "一级功率": f"{first_level_power:.0f}kW",
-                "二级功率": f"{second_level_power:.0f}kW", 
-                "总净发电功率": f"{calculated_total:.0f}kW",
-                "机组选型功率": f"{max_power:.0f}kW"
+                "一级功率(kW)": f"{first_level_power:.0f}",
+                "二级功率(kW)": f"{second_level_power:.0f}", 
+                "总净发电功率(kW)": f"{calculated_total:.0f}",
+                "机组选型功率(kW)": f"{max_power:.0f}"
             }
         
         # 详细计算过程
         calculation_details = {
             "计算过程详情": {
                 "1_主机参数": {
-                    "输入主机功率": f"{main_engine['input_power']:.2f} kW",
-                    "主机损失功率": f"{main_engine['main_loss_power']:.2f} kW", 
-                    "主机输出功率": f"{main_engine['main_output_power']:.2f} kW",
-                    "机组总发电量": f"{main_engine['total_power_generation']:.2f} kW"
+                    "输入主机功率(kW)": f"{main_engine['input_power']:.2f}",
+                    "主机损失功率(kW)": f"{main_engine['main_loss_power']:.2f}", 
+                    "主机输出功率(kW)": f"{main_engine['main_output_power']:.2f}",
+                    "机组总发电量(kW)": f"{main_engine['total_power_generation']:.2f}"
                 },
                 "2_公用功耗": {
-                    "润滑油量": f"{utility_power['lubrication_oil_amount']:.2f}",
-                    "油冷器循环冷却水": f"{utility_power['oil_cooler_circulation_water']:.2f}",
-                    "油泵功率": f"{utility_power['oil_pump_power']:.2f} kW",
-                    "公用功耗自耗电": f"{utility_power['utility_self_consumption']:.2f} kW",
-                    "净发电功率": f"{utility_power['net_power_output']:.2f} kW"
+                    "润滑油量(L)": f"{utility_power['lubrication_oil_amount']:.2f}",
+                    "油冷器循环冷却水(m³/h)": f"{utility_power['oil_cooler_circulation_water']:.2f}",
+                    "油泵功率(kW)": f"{utility_power['oil_pump_power']:.2f}",
+                    "公用功耗自耗电(kW)": f"{utility_power['utility_self_consumption']:.2f}",
+                    "净发电功率(kW)": f"{utility_power['net_power_output']:.2f}"
                 },
                 "3_经济性分析": {
-                    "年发电量": f"{economic_analysis['annual_power_generation']:.4f} kWh",
-                    "年发电收益": f"{economic_analysis['annual_power_income']:.4f} 万元",
-                    "年节约标煤": f"{economic_analysis['annual_coal_savings']:.4f} 吨",
-                    "年节煤效益": f"{economic_analysis['annual_coal_cost_savings']:.4f} 万元",
-                    "年CO2减排量": f"{economic_analysis['annual_co2_reduction']:.4f} 吨"
+                    "年发电量(kWh)": f"{economic_analysis['annual_power_generation']:.4f}",
+                    "年发电收益(万元)": f"{economic_analysis['annual_power_income']:.4f}",
+                    "年节约标煤(吨)": f"{economic_analysis['annual_coal_savings']:.4f}",
+                    "年节煤效益(万元)": f"{economic_analysis['annual_coal_cost_savings']:.4f}",
+                    "年CO2减排量(吨)": f"{economic_analysis['annual_co2_reduction']:.4f}"
                 },
                 "4_机组选型": {
-                    "机组总发电量": f"{main_engine['total_power_generation']:.2f} kW",
+                    "机组总发电量(kW)": f"{main_engine['total_power_generation']:.2f}",
                     "设计类型": "双级发电机组" if is_dual_level else "单级发电机组",
-                    "选型说明": f"净发电功率{net_power:.2f}kW > 1000kW，采用双级设计" if is_dual_level else f"净发电功率{net_power:.2f}kW ≤ 1000kW，采用单级设计",
-                    "选型计算": f"max_power = max({total_power:.2f} - 1000, 1000) = {max_power:.2f}" if is_dual_level else f"max_power = {total_power:.2f}",
-                    "机组选择": f"{unit_selection['unit_selection']:.0f} kW",
+                    "选型说明": f"机组总发电量{total_power:.2f}kW > 1000kW，采用双级设计，总功率除以2" if is_dual_level else f"机组总发电量{total_power:.2f}kW ≤ 1000kW，采用单级设计",
+                    "选型计算": f"一级功率 = 二级功率 = {total_power:.2f} / 2 = {max_power:.2f}" if is_dual_level else f"max_power = {total_power:.2f}",
+                    "机组选择(kW)": f"{unit_selection['unit_selection']:.0f}",
                     "机组尺寸": unit_selection['unit_dimensions'],
-                    "机组重量": f"{unit_selection['unit_weight']}"
+                    "机组重量(kg)": f"{unit_selection['unit_weight']}"
                 },
                 "5_功率分配": {
-                    "一级功率": f"{first_level_power:.0f} kW" if is_dual_level else "N/A",
-                    "二级功率": f"{second_level_power:.0f} kW" if is_dual_level else "N/A",
+                    "一级功率(kW)": f"{first_level_power:.0f}" if is_dual_level else "N/A",
+                    "二级功率(kW)": f"{second_level_power:.0f}" if is_dual_level else "N/A",
                     "功率分配验证": f"{first_level_power:.0f} + {second_level_power:.0f} = {first_level_power + second_level_power:.0f} kW" if is_dual_level else "N/A",
-                    "总净发电功率": f"{first_level_power + second_level_power:.0f} kW" if is_dual_level else f"{net_power:.2f} kW",
-                    "机组选型功率": f"{max_power:.2f} kW"
+                    "总净发电功率(kW)": f"{first_level_power + second_level_power:.0f}" if is_dual_level else f"{net_power:.2f}",
+                    "机组选型功率(kW)": f"{max_power:.2f}"
                 } if is_dual_level else {
-                    "单级功率": f"{total_power:.2f} kW",
-                    "净发电功率": f"{net_power:.2f} kW"
+                    "单级功率(kW)": f"{total_power:.2f}",
+                    "净发电功率(kW)": f"{net_power:.2f}"
                 },
                 "6_回报周期": {
-                    "投资成本": f"{investment_cost:.1f} 万元",
-                    "年收益": f"{annual_income:.4f} 万元",
+                    "投资成本(万元)": f"{investment_cost:.1f}",
+                    "年收益(万元)": f"{annual_income:.4f}",
                     "回报周期计算": f"ROUND({investment_cost:.1f} / {annual_income:.4f}, 1)",
-                    "回报周期": f"{payback_period} 年"
+                    "回报周期(年)": f"{payback_period}"
                 }
             }
         }
@@ -632,11 +657,11 @@ def generate_technical_document(aspen_results: Dict[str, Any], power_results: Di
         
         # 提取关键数据
         power_output = aspen_sim.get('power_output', 654)
-        net_power = power_details.get("2_公用功耗", {}).get("净发电功率", "654.0 kW").replace(" kW", "")
-        annual_power = power_details.get("3_经济性分析", {}).get("年发电量", "525.6 kWh").replace(" kWh", "")
-        annual_income = power_details.get("3_经济性分析", {}).get("年发电收益", "315.36 万元").replace(" 万元", "")
-        coal_savings = power_details.get("3_经济性分析", {}).get("年节约标煤", "184.0 吨").replace(" 吨", "")
-        co2_reduction = power_details.get("3_经济性分析", {}).get("年CO2减排量", "505.4 吨").replace(" 吨", "")
+        net_power = power_details.get("2_公用功耗", {}).get("净发电功率(kW)", "654.0")
+        annual_power = power_details.get("3_经济性分析", {}).get("年发电量(kWh)", "525.6")
+        annual_income = power_details.get("3_经济性分析", {}).get("年发电收益(万元)", "315.36")
+        coal_savings = power_details.get("3_经济性分析", {}).get("年节约标煤(吨)", "184.0")
+        co2_reduction = power_details.get("3_经济性分析", {}).get("年CO2减排量(吨)", "505.4")
         
         # 机组参数
         unit_params = power_selection.get("机组参数", {})
@@ -647,9 +672,9 @@ def generate_technical_document(aspen_results: Dict[str, Any], power_results: Di
         # 技术参数
         tech_params = power_selection.get("技术参数", {})
         max_gas_flow = request.gas_flow_rate  # scmh -> m³/d
-        inlet_pressure = request.inlet_pressure * 10  # MPaA -> MPaG 
+        inlet_pressure = request.inlet_pressure  # MPaA
         avg_inlet_temp = request.inlet_temperature
-        outlet_pressure = request.outlet_pressure * 10  # MPaA -> MPaG
+        outlet_pressure = request.outlet_pressure  # MPaA
         exhaust_temp = tech_params.get("进/排气温度(°C)", "25/45").split("/")[-1] or "45"
         
         # 公用工程参数 - 使用 UtilityParams 类的属性值
@@ -672,44 +697,51 @@ def generate_technical_document(aspen_results: Dict[str, Any], power_results: Di
         compressed_air_demand = str(utility_params_config.air_demand_nm3)         # 压缩空气流量 (Nm³/h)
         
         # 尝试从实际计算结果中获取更精确的值
-        lubrication_oil_amount = utility_params_data.get("润滑油量", "")
+        lubrication_oil_amount = utility_params_data.get("润滑油量(L)", "")
         if lubrication_oil_amount:
             try:
                 # 提取数值部分
-                oil_amount_str = str(lubrication_oil_amount).replace("L", "").strip()
-                oil_amount_value = float(oil_amount_str)
+                oil_amount_value = float(lubrication_oil_amount)
                 # 可以根据实际油量调整流量，但这里保持UtilityParams的标准值
                 logger.info(f"润滑油量（计算值）: {oil_amount_value}L")
             except:
                 pass
         
         # 尝试从油冷器循环冷却水计算中获取数值  
-        oil_cooler_water = utility_params_data.get("油冷器循环冷却水", "")
+        oil_cooler_water = utility_params_data.get("油冷器循环冷却水(m³/h)", "")
         if oil_cooler_water:
             try:
                 # 提取数值部分并使用实际计算值
-                water_str = str(oil_cooler_water).replace("m³/h", "").replace("m³/Hr", "").strip()
-                water_value = float(water_str)
+                water_value = float(oil_cooler_water)
                 oil_cooler_flow = str(int(water_value))  # 直接使用计算的循环水量
                 logger.info(f"油冷器循环水量（计算值）: {water_value} m³/Hr")
             except:
                 pass
         
+        # 从功率计算结果中获取机组设计类型
+        design_type = power_selection.get("设计类型", "单级发电机组")
+        is_dual_level = "双级" in design_type
+        
+        # 根据设计类型设置级数
+        levels = "2" if is_dual_level else "1"
+        
         # 创建参数映射字典，将仿真结果映射到auto_aspen参数
         parameters = {
             # 接入参数 - 天然气处理机组
             "auto_aspen_1": str(int(max_gas_flow * 24)),  # 最大气量 (m³/d)
-            "auto_aspen_2": str(inlet_pressure),          # 进站压力 (MPaG)
+            "auto_aspen_2": str(inlet_pressure),          # 进站压力 (MPaA)
             "auto_aspen_3": str(avg_inlet_temp),          # 平均进气温度 (℃)
-            "auto_aspen_4": str(outlet_pressure),         # 出站压力 (MPaG)
+            "auto_aspen_4": str(outlet_pressure),         # 出站压力 (MPaA)
+            "auto_aspen_27": str(inlet_pressure * 10),          # 进站压力 (MPaG)
+            "auto_aspen_28": str(outlet_pressure * 10),         # 出站压力 (MPaG)
             
             # 段落中的参数
             "auto_aspen_5": str(int(float(net_power))),   # 净发电功率 (kW)
             
             # 机组参数表
-            "auto_aspen_6": "1",                          # 透平机头数
+            "auto_aspen_6": levels,                          # 透平机头数
             "auto_aspen_7": unit_model,                   # 机组型号
-            "auto_aspen_8": "1",                          # 级数
+            "auto_aspen_8": levels,                       # 级数（根据设计类型动态设置）
             "auto_aspen_9": str(exhaust_temp),            # 机组排气温度 (℃)
             
             # 机组占地面积与操作重量
@@ -738,6 +770,9 @@ def generate_technical_document(aspen_results: Dict[str, Any], power_results: Di
             
             # 用户信息
             "auto_aspen_26": get_user_name(request.user_name),             # 用户名称
+            
+            # 时间参数
+            "auto_aspen_time": datetime.datetime.now().strftime("%m/%d/%Y"),  # 当前时间（自动获取）
         }
         
         # 生成时间戳文件名
@@ -778,7 +813,8 @@ def generate_technical_document(aspen_results: Dict[str, Any], power_results: Di
             text_to_images=text_to_images,
             output_name=output_name,
             convert_pdf=False,  # 暂时关闭PDF转换
-            preserve_formatting=False  # 保持格式
+            preserve_formatting=True,  # 保持格式
+            force_font_size=12.0  # 强制设置字体大小为12pt
         )
         
         if result["success"]:
@@ -863,8 +899,8 @@ def generate_diagram_file(power_results: Dict[str, Any]) -> Dict[str, Any]:
                 logger.info(f"✅ 从功率分配获取净发电功率: {net_power} kW")
             
             # 方式2: 从选型输出中获取（单级和双级通用）
-            elif "净发电功率" in selection_output:
-                net_power_str = selection_output.get("净发电功率", "0")
+            elif "净发电功率(kW)" in selection_output:
+                net_power_str = selection_output.get("净发电功率(kW)", "0")
                 net_power = float(str(net_power_str).replace("kW", "").strip())
                 logger.info(f"✅ 从选型输出获取净发电功率: {net_power} kW")
             
@@ -873,8 +909,8 @@ def generate_diagram_file(power_results: Dict[str, Any]) -> Dict[str, Any]:
                 utility_power_data = calculation_details.get("2_公用功耗", {})
                 logger.info(f"🔍 调试信息 - 公用功耗数据字段: {list(utility_power_data.keys()) if utility_power_data else '空'}")
                 
-                if "净发电功率" in utility_power_data:
-                    net_power_str = utility_power_data.get("净发电功率", "0")
+                if "净发电功率(kW)" in utility_power_data:
+                    net_power_str = utility_power_data.get("净发电功率(kW)", "0")
                     net_power = float(str(net_power_str).replace("kW", "").replace(" kW", "").strip())
                     logger.info(f"✅ 从计算详情获取净发电功率: {net_power} kW")
                 else:

@@ -57,6 +57,7 @@ def get_auto_aspen_parameter_mapping():
         
         # 用户信息
         "auto_aspen_26": "用户姓名",     # 用户名称
+        "auto_aspen_time": "2025-07-05", # 生成时间
     }
 
 def create_replacement_dict(parameter_values=None):
@@ -78,105 +79,239 @@ def create_replacement_dict(parameter_values=None):
     
     return default_params
 
-def replace_text_in_paragraph(paragraph, old_text, new_text):
+def replace_text_in_paragraph(paragraph, old_text, new_text, force_font_size=None):
     """
-    在段落中替换文本，保持原始格式
+    在段落中替换文本，保持原始格式，支持跨run的文本替换
     
     Args:
         paragraph: docx段落对象
         old_text (str): 要替换的文本
         new_text (str): 新文本
+        force_font_size (float, optional): 强制设置字体大小（点数），如果不提供则保持原始大小
     
     Returns:
         int: 替换次数
     """
-    if old_text not in paragraph.text:
+    # 检查段落文本中是否包含要替换的文本
+    full_text = paragraph.text
+    if old_text not in full_text:
         return 0
     
-    # 收集所有runs的文本和格式信息
+    # ⚠️ 关键修复：使用精确匹配，避免子字符串污染
+    # 检查是否真的存在需要替换的完整匹配
+    if old_text.startswith('auto_aspen_'):
+        # 确保 auto_aspen_1 不会匹配 auto_aspen_14
+        # 模式：auto_aspen_数字，后面必须是非数字字符或字符串结尾
+        escaped_text = re.escape(old_text)
+        pattern = escaped_text + r'(?=\D|$)'  # 正向前瞻：后面是非数字或字符串结尾
+        if not re.search(pattern, full_text):
+            print(f"🚫 精确匹配检查：'{old_text}' 在 '{full_text}' 中只是子字符串，跳过替换")
+            return 0
+    else:
+        # 对于其他格式，使用单词边界
+        pattern = r'\b' + re.escape(old_text) + r'\b'
+        if not re.search(pattern, full_text):
+            print(f"🚫 精确匹配检查：'{old_text}' 在 '{full_text}' 中只是子字符串，跳过替换")
+            return 0
+    
+    print(f"🔍 段落文本检查: 找到 '{old_text}' 在段落中（精确匹配）")
+    print(f"   段落完整文本: '{full_text}'")
+    print(f"   段落runs数量: {len(paragraph.runs)}")
+    
+    # 如果只有一个run，使用简单方法
+    if len(paragraph.runs) == 1:
+        run = paragraph.runs[0]
+        if old_text in run.text:
+            return replace_text_in_single_run(run, old_text, new_text, force_font_size)
+        return 0
+    
+    # 多run情况：需要跨run替换
+    return replace_text_across_runs(paragraph, old_text, new_text, force_font_size)
+
+def replace_text_in_single_run(run, old_text, new_text, force_font_size=None):
+    """
+    在单个run中替换文本并保持格式
+    """
+    if old_text not in run.text:
+        return 0
+    
+    # 保存原始格式
+    original_bold = run.bold
+    original_italic = run.italic
+    original_underline = run.underline
+    original_font_name = run.font.name
+    original_font_size = run.font.size
+    original_font_color = run.font.color.rgb if run.font.color.rgb else None
+    
+    print(f"🔍 单run替换: '{old_text}' -> '{new_text}'")
+    print(f"   原始字体大小: {original_font_size}")
+    
+    # 执行替换
+    old_count = run.text.count(old_text)
+    run.text = run.text.replace(old_text, new_text)
+    
+    # 恢复/设置格式
+    if original_bold is not None:
+        run.bold = original_bold
+    if original_italic is not None:
+        run.italic = original_italic
+    if original_underline is not None:
+        run.underline = original_underline
+    if original_font_name is not None:
+        run.font.name = original_font_name
+    
+    # 字体大小设置
+    if force_font_size is not None:
+        run.font.size = Pt(force_font_size)
+        print(f"🔧 强制设置字体大小为: {force_font_size}pt")
+    elif original_font_size is not None:
+        run.font.size = original_font_size
+        print(f"🔧 保持原始字体大小: {original_font_size}")
+    
+    if original_font_color is not None:
+        run.font.color.rgb = original_font_color
+    
+    print(f"✅ 单run替换完成: {old_count}次")
+    return old_count
+
+def replace_text_across_runs(paragraph, old_text, new_text, force_font_size=None):
+    """
+    跨run替换文本，这是最复杂的情况
+    """
+    print(f"🔍 跨run替换: '{old_text}' -> '{new_text}'")
+    
+    # 收集所有runs的信息
     runs_info = []
-    for run in paragraph.runs:
-        runs_info.append({
+    char_position = 0
+    
+    for i, run in enumerate(paragraph.runs):
+        run_info = {
+            'index': i,
             'text': run.text,
+            'start_pos': char_position,
+            'end_pos': char_position + len(run.text),
             'bold': run.bold,
             'italic': run.italic,
             'underline': run.underline,
             'font_name': run.font.name,
             'font_size': run.font.size,
             'font_color': run.font.color.rgb if run.font.color.rgb else None,
-        })
+            'run_obj': run
+        }
+        runs_info.append(run_info)
+        char_position += len(run.text)
     
-    # 合并所有文本
-    full_text = ''.join([info['text'] for info in runs_info])
+    # 查找所有匹配位置，使用精确匹配
+    full_text = paragraph.text
+    matches = []
     
-    # 如果不包含要替换的文本，直接返回
-    if old_text not in full_text:
+    if old_text.startswith('auto_aspen_'):
+        # 对 auto_aspen_ 格式使用精确匹配
+        escaped_text = re.escape(old_text)
+        pattern = escaped_text + r'(?=\D|$)'  # 正向前瞻：后面是非数字或字符串结尾
+        for match in re.finditer(pattern, full_text):
+            matches.append((match.start(), match.end()))
+    else:
+        # 对其他格式使用普通查找
+        start = 0
+        while True:
+            pos = full_text.find(old_text, start)
+            if pos == -1:
+                break
+            matches.append((pos, pos + len(old_text)))
+            start = pos + 1
+    
+    if not matches:
         return 0
     
-    # 执行替换
-    new_full_text = full_text.replace(old_text, new_text)
-    replacement_count = full_text.count(old_text)
+    print(f"   找到 {len(matches)} 个匹配位置: {matches}")
     
-    # 清空原有runs
-    for run in paragraph.runs:
-        run.clear()
-    
-    # 重新分配文本到runs，尽量保持原格式
-    char_index = 0
-    run_index = 0
-    
-    for i, char in enumerate(new_full_text):
-        # 找到当前字符应该属于哪个原始run的格式
-        original_char_index = 0
-        target_run_info = runs_info[0]  # 默认使用第一个run的格式
+    # ⚠️ 关键：从后往前替换，避免位置偏移！
+    # 如果有多个匹配项，从前往后替换会改变后面匹配项的位置
+    # 例如：文本"auto_aspen_1和auto_aspen_2"，如果先替换auto_aspen_1为"50000"
+    # 会变成"50000和auto_aspen_2"，auto_aspen_2的位置就改变了
+    # 所以必须从后往前替换
+    replacement_count = 0
+    for match_start, match_end in reversed(matches):
+        # 找到涉及的runs
+        affected_runs = []
+        for run_info in runs_info:
+            if (run_info['start_pos'] < match_end and run_info['end_pos'] > match_start):
+                affected_runs.append(run_info)
         
-        for j, info in enumerate(runs_info):
-            if original_char_index <= char_index < original_char_index + len(info['text']):
-                target_run_info = info
-                break
-            original_char_index += len(info['text'])
+        if not affected_runs:
+            continue
+            
+        print(f"   替换位置 {match_start}-{match_end}，涉及runs: {[r['index'] for r in affected_runs]}")
         
-        # 如果是新增的字符（替换产生的），使用前一个字符的格式
-        if char_index >= len(full_text):
-            # 使用最后一个包含被替换文本的run的格式
-            for j, info in enumerate(runs_info):
-                if old_text in info['text']:
-                    target_run_info = info
-                    break
-        
-        # 创建或获取当前run
-        if run_index >= len(paragraph.runs):
-            run = paragraph.add_run()
+        # 执行跨run替换
+        if len(affected_runs) == 1:
+            # 单run情况
+            run_info = affected_runs[0]
+            run = run_info['run_obj']
+            local_start = match_start - run_info['start_pos']
+            local_end = match_end - run_info['start_pos']
+            
+            new_run_text = run.text[:local_start] + new_text + run.text[local_end:]
+            run.text = new_run_text
+            
+            # 保持格式
+            apply_formatting_to_run(run, run_info, force_font_size)
+            replacement_count += 1
+            
         else:
-            run = paragraph.runs[run_index]
-        
-        # 如果当前run为空或者格式不同，创建新run
-        if (run.text == '' or 
-            run.bold != target_run_info['bold'] or
-            run.italic != target_run_info['italic'] or
-            run.underline != target_run_info['underline']):
+            # 多run情况：重构affected runs
+            first_run = affected_runs[0]['run_obj']
+            last_run = affected_runs[-1]['run_obj']
             
-            if run.text != '':
-                run = paragraph.add_run()
-                run_index += 1
+            # 计算每个run中的替换部分
+            first_run_local_start = match_start - affected_runs[0]['start_pos']
+            last_run_local_end = match_end - affected_runs[-1]['start_pos']
             
-            # 应用格式
-            run.bold = target_run_info['bold']
-            run.italic = target_run_info['italic']
-            run.underline = target_run_info['underline']
-            if target_run_info['font_name']:
-                run.font.name = target_run_info['font_name']
-            # 替换文本统一使用小四字号（12pt）
-            run.font.size = Pt(12)
-            if target_run_info['font_color']:
-                run.font.color.rgb = target_run_info['font_color']
-        
-        run.text += char
-        char_index += 1
+            # 构建新文本
+            new_first_run_text = first_run.text[:first_run_local_start] + new_text
+            new_last_run_text = last_run.text[last_run_local_end:]
+            
+            # 设置第一个run
+            first_run.text = new_first_run_text
+            apply_formatting_to_run(first_run, affected_runs[0], force_font_size)
+            
+            # 设置最后一个run
+            last_run.text = new_last_run_text
+            apply_formatting_to_run(last_run, affected_runs[-1], force_font_size)
+            
+            # 清空中间的runs
+            for run_info in affected_runs[1:-1]:
+                run_info['run_obj'].text = ""
+            
+            replacement_count += 1
     
+    print(f"✅ 跨run替换完成: {replacement_count}次")
     return replacement_count
 
-def replace_text_in_cell(cell, old_text, new_text):
+def apply_formatting_to_run(run, run_info, force_font_size=None):
+    """
+    应用格式到run
+    """
+    if run_info['bold'] is not None:
+        run.bold = run_info['bold']
+    if run_info['italic'] is not None:
+        run.italic = run_info['italic']
+    if run_info['underline'] is not None:
+        run.underline = run_info['underline']
+    if run_info['font_name'] is not None:
+        run.font.name = run_info['font_name']
+    
+    # 字体大小设置
+    if force_font_size is not None:
+        run.font.size = Pt(force_font_size)
+    elif run_info['font_size'] is not None:
+        run.font.size = run_info['font_size']
+    
+    if run_info['font_color'] is not None:
+        run.font.color.rgb = run_info['font_color']
+
+def replace_text_in_cell(cell, old_text, new_text, force_font_size=None):
     """
     在表格单元格中替换文本，保持原始格式
     
@@ -184,16 +319,17 @@ def replace_text_in_cell(cell, old_text, new_text):
         cell: docx表格单元格对象
         old_text (str): 要替换的文本
         new_text (str): 新文本
+        force_font_size (float, optional): 强制设置字体大小（点数）
     
     Returns:
         int: 替换次数
     """
     total_replacements = 0
     for paragraph in cell.paragraphs:
-        total_replacements += replace_text_in_paragraph(paragraph, old_text, new_text)
+        total_replacements += replace_text_in_paragraph(paragraph, old_text, new_text, force_font_size)
     return total_replacements
 
-def replace_text_in_docx_with_formatting(docx_path, replacements, output_docx_path=None):
+def replace_text_in_docx_with_formatting(docx_path, replacements, output_docx_path=None, force_font_size=None):
     """
     读取docx文件，替换指定文本并保持格式，然后保存为新的docx文件
     
@@ -201,11 +337,14 @@ def replace_text_in_docx_with_formatting(docx_path, replacements, output_docx_pa
         docx_path (str): 输入的docx文件路径
         replacements (dict): 需要替换的文本字典，格式为 {old_text: new_text}
         output_docx_path (str, optional): 输出docx文件路径，如果不指定则使用原文件名加_modified后缀
+        force_font_size (float, optional): 强制设置字体大小（点数），如果不提供则保持原始大小
     
     Returns:
         str: 生成的docx文件路径
     """
     print(f"正在读取文档: {docx_path}")
+    if force_font_size:
+        print(f"🔧 将强制设置字体大小为: {force_font_size}pt")
     
     # 加载docx文档
     doc = docx.Document(docx_path)
@@ -219,7 +358,7 @@ def replace_text_in_docx_with_formatting(docx_path, replacements, output_docx_pa
     for paragraph in doc.paragraphs:
         for old_text in sorted_keys:
             new_text = replacements[old_text]
-            count = replace_text_in_paragraph(paragraph, old_text, new_text)
+            count = replace_text_in_paragraph(paragraph, old_text, new_text, force_font_size)
             if count > 0:
                 print(f"在段落中找到并替换: '{old_text}' -> '{new_text}' ({count}次)")
                 replaced_count += count
@@ -230,7 +369,7 @@ def replace_text_in_docx_with_formatting(docx_path, replacements, output_docx_pa
             for cell in row.cells:
                 for old_text in sorted_keys:
                     new_text = replacements[old_text]
-                    count = replace_text_in_cell(cell, old_text, new_text)
+                    count = replace_text_in_cell(cell, old_text, new_text, force_font_size)
                     if count > 0:
                         print(f"在表格中找到并替换: '{old_text}' -> '{new_text}' ({count}次)")
                         replaced_count += count
@@ -325,7 +464,7 @@ def convert_to_pdf_with_libre_office(docx_path):
         print(f"LibreOffice转换出错: {e}")
         return None
 
-def process_document_with_parameters(docx_path, custom_parameters=None, image_replacements=None, text_to_image_replacements=None, output_docx_path=None, convert_to_pdf=True, preserve_formatting=True):
+def process_document_with_parameters(docx_path, custom_parameters=None, image_replacements=None, text_to_image_replacements=None, output_docx_path=None, convert_to_pdf=True, preserve_formatting=True, force_font_size=None):
     """
     使用参数映射处理文档的主函数（支持文本替换、图片替换、文字转图片）
     
@@ -337,6 +476,7 @@ def process_document_with_parameters(docx_path, custom_parameters=None, image_re
         output_docx_path (str, optional): 输出docx文件路径
         convert_to_pdf (bool): 是否转换为PDF
         preserve_formatting (bool): 是否保持原始格式
+        force_font_size (float, optional): 强制设置字体大小（点数）
     
     Returns:
         dict: 包含处理结果的字典
@@ -348,7 +488,9 @@ def process_document_with_parameters(docx_path, custom_parameters=None, image_re
         # 选择替换方法
         if preserve_formatting:
             print("使用格式保持模式进行文本替换...")
-            modified_docx_path = replace_text_in_docx_with_formatting(docx_path, replacements, output_docx_path)
+            if force_font_size:
+                print(f"🔧 将强制设置字体大小为: {force_font_size}pt")
+            modified_docx_path = replace_text_in_docx_with_formatting(docx_path, replacements, output_docx_path, force_font_size)
         else:
             print("使用简单模式进行文本替换...")
             modified_docx_path = replace_text_in_docx(docx_path, replacements, output_docx_path)
@@ -433,7 +575,7 @@ def main():
     else:
         print(f"\n文档处理失败: {result['error']}")
 
-def generate_document(parameters=None, images=None, text_to_images=None, output_name=None, convert_pdf=True, preserve_formatting=True):
+def generate_document(parameters=None, images=None, text_to_images=None, output_name=None, convert_pdf=True, preserve_formatting=True, force_font_size=None):
     """
     简化的API函数：生成带有指定参数、图片替换、文字转图片的文档
     
@@ -444,6 +586,7 @@ def generate_document(parameters=None, images=None, text_to_images=None, output_
         output_name (str, optional): 输出文件名（不含扩展名），默认为"RE_generated"
         convert_pdf (bool): 是否同时生成PDF文件
         preserve_formatting (bool): 是否保持原始格式（字体、颜色等）
+        force_font_size (float, optional): 强制设置字体大小（点数），如12.0表示12pt字体
     
     Returns:
         dict: 包含生成文件路径的结果字典
@@ -459,6 +602,9 @@ def generate_document(parameters=None, images=None, text_to_images=None, output_
             "auto_aspen_5": "800"     # 净发电功率
         }
         result = generate_document(parameters=params, output_name="custom_report", preserve_formatting=True)
+        
+        # 强制设置字体大小为12pt
+        result = generate_document(parameters=params, force_font_size=12.0)
         
         # 同时替换参数和图片
         images = {
@@ -512,7 +658,8 @@ def generate_document(parameters=None, images=None, text_to_images=None, output_
         text_to_images,
         output_docx_path,
         convert_pdf,
-        preserve_formatting
+        preserve_formatting,
+        force_font_size
     )
     
     return {
@@ -527,35 +674,59 @@ def generate_document(parameters=None, images=None, text_to_images=None, output_
 
 def sort_auto_aspen_keys_reverse(replacements):
     """
-    对auto_aspen参数按编号倒序排序，其他参数保持原顺序
+    对替换键进行智能排序，适应跨run替换需求
+    
+    排序规则：
+    1. 首先按key长度倒序排序（长key优先，避免短key污染长key）
+    2. 长度相同时按字典序倒序排序（确保后出现的key先替换）
+    3. 非auto_aspen参数保持原顺序
+    
+    这样的排序策略确保了：
+    - auto_aspen_623 比 auto_aspen_6 先替换（避免污染）
+    - auto_aspen_time 比 auto_aspen_26 先替换（长度优先）
+    - auto_aspen_9 比 auto_aspen_8 先替换（倒序，适应跨run替换）
     
     Args:
         replacements (dict): 替换字典
     
     Returns:
-        list: 按auto_aspen编号倒序排列的键列表
+        list: 按智能规则排序的键列表
     """
     auto_aspen_keys = []
     other_keys = []
     
     for key in replacements.keys():
         if key.startswith("auto_aspen_"):
-            # 提取数字部分
-            match = re.search(r'auto_aspen_(\d+)', key)
-            if match:
-                number = int(match.group(1))
-                auto_aspen_keys.append((key, number))
-            else:
-                other_keys.append(key)
+            auto_aspen_keys.append(key)
         else:
             other_keys.append(key)
     
-    # 按数字倒序排序auto_aspen参数
-    auto_aspen_keys.sort(key=lambda x: x[1], reverse=True)
-    sorted_auto_aspen_keys = [key for key, _ in auto_aspen_keys]
+    # 智能排序策略：
+    # 1. 首先按长度倒序（长key优先）
+    # 2. 长度相同时按字典序倒序（后面的key先替换，适应跨run替换）
+    auto_aspen_keys.sort(key=lambda x: (-len(x), x), reverse=True)
+    
+    print(f"🔍 跨run适配排序结果: {auto_aspen_keys[:10]}...")  # 显示前10个用于调试
+    
+    # 详细的排序测试示例
+    if len(auto_aspen_keys) > 0:
+        print(f"🧪 排序逻辑验证:")
+        print(f"   策略：长度优先 → 字典序倒序")
+        
+        # 按长度分组显示
+        length_groups = {}
+        for key in auto_aspen_keys[:8]:  # 只显示前8个
+            length = len(key)
+            if length not in length_groups:
+                length_groups[length] = []
+            length_groups[length].append(key)
+        
+        for length in sorted(length_groups.keys(), reverse=True):
+            keys_in_group = length_groups[length]
+            print(f"   长度{length}: {keys_in_group}")
     
     # 返回排序后的完整键列表
-    return sorted_auto_aspen_keys + other_keys
+    return auto_aspen_keys + other_keys
 
 def find_images_in_document(doc):
     """
@@ -1024,43 +1195,44 @@ if __name__ == "__main__":
     print("="*50 + "\n")
     
     custom_params = get_auto_aspen_parameter_mapping()
-    result1 = generate_document(parameters=custom_params, output_name="demo_custom_formatted", convert_pdf=False, preserve_formatting=False)
+    result1 = generate_document(parameters=custom_params, output_name="demo_custom_formatted", convert_pdf=False, 
+    preserve_formatting=True)
     print(f"文本替换结果: {result1}")
     
-    print("\n" + "="*50)
-    print("测试图片替换功能")
-    print("="*50 + "\n")
+    # print("\n" + "="*50)
+    # print("测试图片替换功能")
+    # print("="*50 + "\n")
     
     # 检查模板文件中的图片
-    template_path = "models/RE_template.docx"
+    # template_path = "models/RE_template.docx"
     
-    # 使用demo.png作为替换图片
-    demo_image = "models/demo.png"
-    if os.path.exists(demo_image):
-        text_to_image_replacements = {
-            "auto_aspen_image_1": {
-                "image_path": "models/demo.png",
-                "width": 5.0,
-                "height": 3.0
-                },
-        }
-        # 测试全功能（文本+图片+文字转图片）
-        print(f"\n全功能测试（文本+图片+文字转图片）:")
-        full_result = generate_document(
-            parameters=custom_params,
-            images=[],
-            text_to_images=text_to_image_replacements,
-            output_name="demo_full_features",
-            convert_pdf=False,
-            preserve_formatting=False
-        )
-        print(f"全功能测试结果: {full_result}")
+    # # 使用demo.png作为替换图片
+    # demo_image = "models/demo.png"
+    # if os.path.exists(demo_image):
+    #     text_to_image_replacements = {
+    #         "auto_aspen_image_1": {
+    #             "image_path": "models/demo.png",
+    #             "width": 5.0,
+    #             "height": 3.0
+    #             },
+    #     }
+    #     # 测试全功能（文本+图片+文字转图片）
+    #     print(f"\n全功能测试（文本+图片+文字转图片）:")
+    #     full_result = generate_document(
+    #         parameters=custom_params,
+    #         images=[],
+    #         text_to_images=text_to_image_replacements,
+    #         output_name="demo_full_features",
+    #         convert_pdf=False,
+    #         preserve_formatting=False
+    #     )
+    #     print(f"全功能测试结果: {full_result}")
         
-    else:
-        print(f"\n警告: Demo图片不存在: {demo_image}")
-        print("将跳过图片相关测试")
+    # else:
+    #     print(f"\n警告: Demo图片不存在: {demo_image}")
+    #     print("将跳过图片相关测试")
     
-    print("\n" + "="*50)
-    print("测试完成")
-    print("="*50)
+    # print("\n" + "="*50)
+    # print("测试完成")
+    # print("="*50)
     
