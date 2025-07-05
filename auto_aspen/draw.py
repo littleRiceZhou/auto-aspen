@@ -1,22 +1,30 @@
 from PIL import Image, ImageDraw, ImageFont
 import os
 
-def draw_one_level(outer_size=(550, 300), net_power=654):
+def draw_one_level(outer_size=(550, 300), net_power=654, fill_canvas=True):
     """
     绘制天然气压差发电机组示意图
     
     参数:
     outer_size: 外层矩形尺寸 (width, height) 单位像素，对应实际5.5m x 3m
     net_power: 净发电功率数值 (kW)
+    fill_canvas: 是否铺满整个画布 (True: 完全铺满, False: 留边距)
     """
     
     # 从像素尺寸计算实际尺寸（除以100）
     actual_width = outer_size[0] / 100
     actual_height = outer_size[1] / 100
     
-    # 创建图像，白色背景
-    img_width = 550 + 200  # 额外空间用于标注
-    img_height = 300 + 150
+    # 创建图像，白色背景 - 根据内容自适应大小
+    if fill_canvas:
+        # 铺满画布，只留最小边距用于标注
+        margin = 50
+    else:
+        # 保留较大边距
+        margin = 80
+    
+    img_width = outer_size[0] + margin * 2
+    img_height = outer_size[1] + margin * 2
     img = Image.new('RGB', (img_width, img_height), 'white')
     draw = ImageDraw.Draw(img)
     
@@ -38,9 +46,9 @@ def draw_one_level(outer_size=(550, 300), net_power=654):
             font_medium = ImageFont.load_default()
             font_small = ImageFont.load_default()
     
-    # 外层矩形位置
-    rect_x = 50
-    rect_y = 50
+    # 外层矩形位置 - 居中显示
+    rect_x = margin
+    rect_y = margin  
     rect_width = outer_size[0]
     rect_height = outer_size[1]
     
@@ -149,7 +157,7 @@ def draw_one_level(outer_size=(550, 300), net_power=654):
     return img
 
 
-def draw_two_level(outer_size=(450, 350), net_power=486, one_power=237):
+def draw_two_level(outer_size=(450, 350), net_power=486, one_power=237, fill_canvas=True):
     """
     绘制双级天然气压差发电机组示意图
     
@@ -157,6 +165,7 @@ def draw_two_level(outer_size=(450, 350), net_power=486, one_power=237):
     outer_size: 外层矩形尺寸 (width, height) 单位像素
     net_power: 总净发电功率数值 (kW)
     one_power: 1#透平净发电功率 (kW)
+    fill_canvas: 是否铺满整个画布 (True: 铺满, False: 留边距)
     """
     
     # 从像素尺寸计算实际尺寸（除以100）
@@ -165,9 +174,16 @@ def draw_two_level(outer_size=(450, 350), net_power=486, one_power=237):
     
     two_power = net_power - one_power  # 2#透平功率
     
-    # 创建图像，白色背景
-    img_width = 550 + 200  # 额外空间用于标注
-    img_height = 350 + 150
+    # 创建图像，白色背景 - 根据内容自适应大小
+    if fill_canvas:
+        # 铺满画布，只留最小边距用于标注
+        margin = 50
+    else:
+        # 保留较大边距
+        margin = 80
+    
+    img_width = outer_size[0] + margin * 2
+    img_height = outer_size[1] + margin * 2
     img = Image.new('RGB', (img_width, img_height), 'white')
     draw = ImageDraw.Draw(img)
     
@@ -189,11 +205,11 @@ def draw_two_level(outer_size=(450, 350), net_power=486, one_power=237):
             font_medium = ImageFont.load_default()
             font_small = ImageFont.load_default()
     
-    # 外层矩形位置
-    rect_x = 50
-    rect_y = 50
-    rect_width = 550
-    rect_height = 350
+    # 外层矩形位置 - 居中显示
+    rect_x = margin
+    rect_y = margin
+    rect_width = outer_size[0]
+    rect_height = outer_size[1]
     
     # 绘制外层矩形
     draw.rectangle([rect_x, rect_y, rect_x + rect_width, rect_y + rect_height], 
@@ -325,24 +341,33 @@ def draw_two_level(outer_size=(450, 350), net_power=486, one_power=237):
     
     return img
 
-def draw(outer_size=(550, 300), net_power=654):
+def draw(outer_size=(550, 300), net_power=654, fill_canvas=True):
     if net_power > 1000:
-        return draw_two_level(outer_size, net_power=net_power, one_power=1000)
+        return draw_two_level(outer_size, net_power=net_power, one_power=1000, fill_canvas=fill_canvas)
     else:
-        return draw_one_level(outer_size, net_power=net_power)
+        return draw_one_level(outer_size, net_power=net_power, fill_canvas=fill_canvas)
 
 def main():
     """示例用法"""
-    # 创建单级发电机组图像
-    img1 = draw()
-    img1.save("gas_generator_one_level.png")
-    print("已保存单级图像: gas_generator_one_level.png")
+    # 创建单级发电机组图像 - 铺满画布
+    img1 = draw(fill_canvas=True)
+    img1.save("gas_generator_one_level_filled.png")
+    print("已保存单级图像(铺满): gas_generator_one_level_filled.png")
     
+    # 创建单级发电机组图像 - 留边距
+    img2 = draw(fill_canvas=False)
+    img2.save("gas_generator_one_level_margin.png")
+    print("已保存单级图像(留边距): gas_generator_one_level_margin.png")
     
-    # 创建自定义参数的双级图像
-    img3 = draw(outer_size=(500, 400), net_power=1600)
-    img3.save("gas_generator_custom.png")
-    print("已保存双级图像: gas_generator_two_level.png")
+    # 创建自定义参数的双级图像 - 铺满画布
+    img3 = draw(outer_size=(500, 400), net_power=1600, fill_canvas=True)
+    img3.save("gas_generator_two_level_filled.png")
+    print("已保存双级图像(铺满): gas_generator_two_level_filled.png")
+    
+    # 创建自定义参数的双级图像 - 留边距
+    img4 = draw(outer_size=(500, 400), net_power=1600, fill_canvas=False)
+    img4.save("gas_generator_two_level_margin.png")
+    print("已保存双级图像(留边距): gas_generator_two_level_margin.png")
     
 
 if __name__ == "__main__":

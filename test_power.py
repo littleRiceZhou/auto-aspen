@@ -89,11 +89,11 @@ def calculate_unit_selection(main_power: float = 66.53419):
                 "净发电功率": f"{utility_power['net_power_output']:.2f} kW"
             },
             "3_经济性分析": {
-                "年发电量": f"{economic_analysis['annual_power_generation']:.4f} 万kWh",
-                "年发电收益": f"{economic_analysis['annual_power_income']:.4f} 万元",
-                "年节约标煤": f"{economic_analysis['annual_coal_savings']:.4f} 万吨",
-                "年节煤效益": f"{economic_analysis['annual_coal_cost_savings']:.4f} 万元",
-                "年CO2减排量": f"{economic_analysis['annual_co2_reduction']:.4f} 万吨"
+                        "年发电量": f"{economic_analysis['annual_power_generation']:.4f} kWh",
+        "年发电收益": f"{economic_analysis['annual_power_income']:.4f} 万元",
+        "年节约标煤": f"{economic_analysis['annual_coal_savings']:.4f} 吨",
+        "年节煤效益": f"{economic_analysis['annual_coal_cost_savings']:.4f} 万元",
+        "年CO2减排量": f"{economic_analysis['annual_co2_reduction']:.4f} 吨"
             },
             "4_机组选型": {
                 "机组总发电量": f"{main_engine['total_power_generation']:.2f} kW",

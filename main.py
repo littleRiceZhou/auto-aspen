@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional
 import traceback
 import os
+import getpass
 from loguru import logger
 import datetime
 
@@ -42,33 +43,35 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 class GasComposition(BaseModel):
     """气体组成"""
-    CH4: float = Field(default=100, description="甲烷含量 (%)")
+    CH4: float = Field(default=0, description="甲烷含量 (%)")
     C2H6: float = Field(default=0, description="乙烷含量 (%)")
     C3H8: float = Field(default=0, description="丙烷含量 (%)")
     C4H10: float = Field(default=0, description="丁烷含量 (%)")
     N2: float = Field(default=0, description="氮气含量 (%)")
     CO2: float = Field(default=0, description="二氧化碳含量 (%)")
     H2S: float = Field(default=0, description="硫化氢含量 (%)")
+    O2: float = Field(default=0, description="氧气含量 (%)")
+    H2: float = Field(default=0, description="氢气含量 (%)")
+    H2O: float = Field(default=0, description="水含量 (%)")
+    HE: float = Field(default=0, description="氦气含量 (%)")
+    C2H2: float = Field(default=0, description="乙炔含量 (%)")
+    C2H4: float = Field(default=0, description="乙烯含量 (%)")
 
 class SimulationRequest(BaseModel):
     """综合仿真请求参数"""
     # ASPEN仿真参数
     gas_flow_rate: float = Field(
-        default=33333.333333,
         description="气体流量 (scmh)",
         gt=0
     )
     inlet_pressure: float = Field(
-        default=0.80,
         description="入口压力 (MPaA)",
         gt=0
     )
     inlet_temperature: float = Field(
-        default=20.0,
         description="入口温度 (°C)"
     )
     outlet_pressure: float = Field(
-        default=0.30,
         description="出口压力 (MPaA)",
         gt=0
     )
@@ -81,6 +84,12 @@ class SimulationRequest(BaseModel):
     gas_composition: GasComposition = Field(
         default_factory=GasComposition,
         description="气体组成"
+    )
+    
+    # 用户信息
+    user_name: Optional[str] = Field(
+        default=None,
+        description="用户名称（可选）"
     )
 
     
@@ -222,6 +231,33 @@ async def run_comprehensive_simulation(request: SimulationRequest):
         )
 
 # ============ 内部辅助函数 ============
+
+def get_user_name(request_user_name: str = None) -> str:
+    """
+    获取用户名称
+    优先级：前端传递的用户名称 > 环境变量 USER_NAME > 系统当前用户 > 默认值
+    """
+    try:
+        # 优先使用前端传递的用户名称
+        if request_user_name and request_user_name.strip():
+            return request_user_name.strip()
+        
+        # 从环境变量获取
+        user_name = os.getenv("USER_NAME")
+        if user_name:
+            return user_name
+            
+        # 从系统当前用户获取
+        user_name = getpass.getuser()
+        if user_name:
+            return user_name
+            
+        # 默认值
+        return "系统用户"
+        
+    except Exception as e:
+        logger.warning(f"获取用户名称失败: {str(e)}，使用默认值")
+        return "系统用户"
 
 async def run_aspen_simulation_internal(request: SimulationRequest) -> Dict[str, Any]:
     """内部ASPEN仿真函数"""
@@ -528,11 +564,11 @@ async def run_power_calculation_internal(main_power: float, aspen_results: Dict[
                     "净发电功率": f"{utility_power['net_power_output']:.2f} kW"
                 },
                 "3_经济性分析": {
-                    "年发电量": f"{economic_analysis['annual_power_generation']:.4f} 万kWh",
+                    "年发电量": f"{economic_analysis['annual_power_generation']:.4f} kWh",
                     "年发电收益": f"{economic_analysis['annual_power_income']:.4f} 万元",
-                    "年节约标煤": f"{economic_analysis['annual_coal_savings']:.4f} 万吨",
+                    "年节约标煤": f"{economic_analysis['annual_coal_savings']:.4f} 吨",
                     "年节煤效益": f"{economic_analysis['annual_coal_cost_savings']:.4f} 万元",
-                    "年CO2减排量": f"{economic_analysis['annual_co2_reduction']:.4f} 万吨"
+                    "年CO2减排量": f"{economic_analysis['annual_co2_reduction']:.4f} 吨"
                 },
                 "4_机组选型": {
                     "机组总发电量": f"{main_engine['total_power_generation']:.2f} kW",
@@ -597,10 +633,10 @@ def generate_technical_document(aspen_results: Dict[str, Any], power_results: Di
         # 提取关键数据
         power_output = aspen_sim.get('power_output', 654)
         net_power = power_details.get("2_公用功耗", {}).get("净发电功率", "654.0 kW").replace(" kW", "")
-        annual_power = power_details.get("3_经济性分析", {}).get("年发电量", "525.6 万kWh").replace(" 万kWh", "")
+        annual_power = power_details.get("3_经济性分析", {}).get("年发电量", "525.6 kWh").replace(" kWh", "")
         annual_income = power_details.get("3_经济性分析", {}).get("年发电收益", "315.36 万元").replace(" 万元", "")
-        coal_savings = power_details.get("3_经济性分析", {}).get("年节约标煤", "184.0 万吨").replace(" 万吨", "")
-        co2_reduction = power_details.get("3_经济性分析", {}).get("年CO2减排量", "505.4 万吨").replace(" 万吨", "")
+        coal_savings = power_details.get("3_经济性分析", {}).get("年节约标煤", "184.0 吨").replace(" 吨", "")
+        co2_reduction = power_details.get("3_经济性分析", {}).get("年CO2减排量", "505.4 吨").replace(" 吨", "")
         
         # 机组参数
         unit_params = power_selection.get("机组参数", {})
@@ -682,10 +718,10 @@ def generate_technical_document(aspen_results: Dict[str, Any], power_results: Di
             "auto_aspen_12": str(unit_weight),            # 机组整体重量/整体维修保养最大重量 (kg)
             
             # 项目整体经济效益核算
-            "auto_aspen_13": str(float(annual_power)),    # 年净发电量 (×10⁴kWh)
+            "auto_aspen_13": str(float(annual_power)),    # 年净发电量 (kWh)
             "auto_aspen_14": str(float(annual_income)),   # 年净发电收益 (万元)
-            "auto_aspen_15": str(float(coal_savings) * 10000),  # 年节约标准煤 (吨)
-            "auto_aspen_16": str(float(co2_reduction) * 10000), # 年减少CO₂排放 (吨)
+            "auto_aspen_15": str(float(coal_savings)),    # 年节约标准煤 (吨)
+            "auto_aspen_16": str(float(co2_reduction)),   # 年减少CO₂排放 (吨)
             
             # 机组公用工程 - 电源设备参数
             "auto_aspen_17": oil_pump_power,              # 辅油泵功率 (kW)
@@ -699,6 +735,9 @@ def generate_technical_document(aspen_results: Dict[str, Any], power_results: Di
             "auto_aspen_23": lubrication_flow,            # 齿轮箱润滑油流量 (L/min)
             "auto_aspen_24": nitrogen_flow,               # 氮气-干气密封气体流量 (Nm³/h)
             "auto_aspen_25": compressed_air_demand,       # 压缩空气-气动阀气体流量 (Nm³/h)
+            
+            # 用户信息
+            "auto_aspen_26": get_user_name(request.user_name),             # 用户名称
         }
         
         # 生成时间戳文件名
@@ -733,6 +772,7 @@ def generate_technical_document(aspen_results: Dict[str, Any], power_results: Di
         
         # 生成文档
         logger.info(f"正在生成技术文档，参数数量: {len(parameters)}")
+        logger.info(f"用户名称: {get_user_name(request.user_name)}")
         result = generate_document(
             parameters=parameters,
             text_to_images=text_to_images,
@@ -853,7 +893,7 @@ def generate_diagram_file(power_results: Dict[str, Any]) -> Dict[str, Any]:
         width_pixels = int(unit_dimensions[0] * 100)  # 长度×100
         height_pixels = int(unit_dimensions[1] * 100)  # 宽度×100
         logger.info(f"生成机组布局图 - 净发电功率: {int(net_power)} kW, 尺寸: {width_pixels}x{height_pixels}")
-        img = draw(outer_size=(width_pixels, height_pixels), net_power=int(net_power))
+        img = draw(outer_size=(width_pixels, height_pixels), net_power=int(net_power), fill_canvas=True)
         # 生成时间戳文件名
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]  # 毫秒精度
         filename = f"diagram_{timestamp}.png"

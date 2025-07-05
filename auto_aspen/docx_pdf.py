@@ -1,7 +1,7 @@
 import docx
 import os
 from pathlib import Path
-from docx.shared import RGBColor, Inches
+from docx.shared import RGBColor, Inches, Pt
 from docx.oxml.shared import qn
 import re
 
@@ -37,7 +37,7 @@ def get_auto_aspen_parameter_mapping():
         "auto_aspen_12": "12000",     # 机组整体重量/整体维修保养最大重量 (kg)
         
         # 项目整体经济效益核算
-        "auto_aspen_13": "525.6",     # 年净发电量 (×10⁴kWh)
+        "auto_aspen_13": "525.6",     # 年净发电量 (kWh)
         "auto_aspen_14": "315.36",    # 年净发电收益 (万元)
         "auto_aspen_15": "184.0",     # 年节约标准煤 (吨)
         "auto_aspen_16": "505.4",     # 年减少CO₂排放 (吨)
@@ -54,6 +54,9 @@ def get_auto_aspen_parameter_mapping():
         "auto_aspen_23": "45",        # 齿轮箱润滑油流量 (L/min)
         "auto_aspen_24": "120",       # 氮气-干气密封气体流量 (Nm³/h)
         "auto_aspen_25": "95",        # 压缩空气-气动阀气体流量 (Nm³/h)
+        
+        # 用户信息
+        "auto_aspen_26": "用户姓名",     # 用户名称
     }
 
 def create_replacement_dict(parameter_values=None):
@@ -163,8 +166,8 @@ def replace_text_in_paragraph(paragraph, old_text, new_text):
             run.underline = target_run_info['underline']
             if target_run_info['font_name']:
                 run.font.name = target_run_info['font_name']
-            if target_run_info['font_size']:
-                run.font.size = target_run_info['font_size']
+            # 替换文本统一使用小四字号（12pt）
+            run.font.size = Pt(12)
             if target_run_info['font_color']:
                 run.font.color.rgb = target_run_info['font_color']
         

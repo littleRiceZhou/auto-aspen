@@ -221,11 +221,11 @@ class PowerCalculations:
             annual_co2_reduction = annual_power_generation * params.co2_emission_factor * 10
             
             results = {
-                "annual_power_generation": annual_power_generation,  # 年发电量(万kWh)
+                "annual_power_generation": annual_power_generation,  # 年发电量(kWh)
                 "annual_power_income": annual_power_income,  # 年发电收益(万元)
-                "annual_coal_savings": annual_coal_savings,  # 年节约标煤(万吨)
+                "annual_coal_savings": annual_coal_savings,  # 年节约标煤(吨)
                 "annual_coal_cost_savings": annual_coal_cost_savings,  # 年节煤效益(万元)
-                "annual_co2_reduction": annual_co2_reduction,  # 年CO2减排量(万吨)
+                "annual_co2_reduction": annual_co2_reduction,  # 年CO2减排量(吨)
             }
             
             self.logger.info(f"经济性分析计算完成: {results}")

@@ -716,11 +716,19 @@ class SimulationParameters:
     outlet_pressure: float = 3.0    # MPaA
     efficiency: float = 80.0        # %
     gas_composition: Dict[str, float] = field(default_factory=lambda: {
-        'CH4': 85.0,    # 甲烷
-        'C2H6': 8.0,    # 乙烷
-        'C3H8': 3.0,    # 丙烷
-        'N2': 2.0,      # 氮气
-        'CO2': 2.0      # 二氧化碳
+        'CH4': 0.0,     # 甲烷
+        'C2H6': 0.0,    # 乙烷
+        'C3H8': 0.0,    # 丙烷
+        'C4H10': 0.0,   # 丁烷
+        'N2': 0.0,      # 氮气
+        'CO2': 0.0,     # 二氧化碳
+        'H2S': 0.0,     # 硫化氢
+        'O2': 0.0,      # 氧气
+        'H2': 0.0,      # 氢气
+        'H2O': 0.0,     # 水
+        'HE': 0.0,      # 氦气
+        'C2H2': 0.0,    # 乙炔
+        'C2H4': 0.0     # 乙烯
     })
     other_requirements: str = '标准工况下的气体处理'
     

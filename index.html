@@ -880,7 +880,7 @@
                                 气体流量 <span class="unit-info">(Nm³/day, 24 Nm³/day = 1 scmh)</span>
                             </label>
                             <input type="number" id="gasFlowRate" name="gas_flow_rate" class="form-input" 
-                                   value="800000" step="1000" required>
+                                   value="" step="1000" required>
                         </div>
 
                         <div class="form-group">
@@ -889,6 +889,14 @@
                             </label>
                             <input type="number" id="efficiency" name="efficiency" class="form-input" 
                                    value="85" min="0" max="100" step="0.1" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="userName">
+                                用户名称 <span class="unit-info">(可选)</span>
+                            </label>
+                            <input type="text" id="userName" name="user_name" class="form-input" 
+                                   value="" placeholder="请输入您的姓名">
                         </div>
                     </div>
                 </div>
@@ -913,7 +921,7 @@
                                 入口压力 <span class="unit-info">(MPaA)</span>
                             </label>
                             <input type="number" id="inletPressure" name="inlet_pressure" class="form-input" 
-                                   value="0.80" step="0.01" min="0" required>
+                                   value="" step="0.01" min="0" required>
                         </div>
 
                         <div class="form-group">
@@ -921,7 +929,7 @@
                                 出口压力 <span class="unit-info">(MPaA)</span>
                             </label>
                             <input type="number" id="outletPressure" name="outlet_pressure" class="form-input" 
-                                   value="0.30" step="0.01" min="0" required>
+                                   value="" step="0.01" min="0" required>
                         </div>
 
                         <div class="form-group">
@@ -929,7 +937,7 @@
                                 入口温度 <span class="unit-info">(°C)</span>
                             </label>
                             <input type="number" id="inletTemperature" name="inlet_temperature" class="form-input" 
-                                   value="20.0" step="0.1" required>
+                                   value="" step="0.1" required>
                         </div>
                     </div>
                 </div>
@@ -955,44 +963,96 @@
                             <div class="form-group">
                                 <label class="form-label" for="ch4">CH₄ (甲烷)</label>
                                 <input type="number" id="ch4" name="CH4" class="form-input" 
-                                       value="100" min="0" max="100" step="0.1" required>
+                                       value="" min="0" max="100" step="0.1" required>
                             </div>
 
                             <div class="form-group">
                                 <label class="form-label" for="c2h6">C₂H₆ (乙烷)</label>
                                 <input type="number" id="c2h6" name="C2H6" class="form-input" 
-                                       value="0" min="0" max="100" step="0.1" required>
+                                       value="" min="0" max="100" step="0.1" required>
                             </div>
 
                             <div class="form-group">
                                 <label class="form-label" for="c3h8">C₃H₈ (丙烷)</label>
                                 <input type="number" id="c3h8" name="C3H8" class="form-input" 
-                                       value="0" min="0" max="100" step="0.1" required>
+                                       value="" min="0" max="100" step="0.1" required>
                             </div>
 
                             <div class="form-group">
                                 <label class="form-label" for="c4h10">C₄H₁₀ (丁烷)</label>
                                 <input type="number" id="c4h10" name="C4H10" class="form-input" 
-                                       value="0" min="0" max="100" step="0.1" required>
+                                       value="" min="0" max="100" step="0.1" required>
                             </div>
 
                             <div class="form-group">
                                 <label class="form-label" for="n2">N₂ (氮气)</label>
                                 <input type="number" id="n2" name="N2" class="form-input" 
-                                       value="0" min="0" max="100" step="0.1" required>
+                                       value="" min="0" max="100" step="0.1" required>
                             </div>
 
                             <div class="form-group">
                                 <label class="form-label" for="co2">CO₂ (二氧化碳)</label>
                                 <input type="number" id="co2" name="CO2" class="form-input" 
-                                       value="0" min="0" max="100" step="0.1" required>
+                                       value="" min="0" max="100" step="0.1" required>
                             </div>
 
                             <div class="form-group">
                                 <label class="form-label" for="h2s">H₂S (硫化氢)</label>
                                 <input type="number" id="h2s" name="H2S" class="form-input" 
-                                       value="0" min="0" max="100" step="0.1" required>
+                                       value="" min="0" max="100" step="0.1" required>
                             </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="o2">O₂ (氧气)</label>
+                                <input type="number" id="o2" name="O2" class="form-input" 
+                                       value="" min="0" max="100" step="0.1" required>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="h2">H₂ (氢气)</label>
+                                <input type="number" id="h2" name="H2" class="form-input" 
+                                       value="" min="0" max="100" step="0.1" required>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="h2o">H₂O (水)</label>
+                                <input type="number" id="h2o" name="H2O" class="form-input" 
+                                       value="" min="0" max="100" step="0.1" required>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="he">He (氦气)</label>
+                                <input type="number" id="he" name="HE" class="form-input" 
+                                       value="" min="0" max="100" step="0.1" required>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="c2h2">C₂H₂ (乙炔)</label>
+                                <input type="number" id="c2h2" name="C2H2" class="form-input" 
+                                       value="" min="0" max="100" step="0.1" required>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="c2h4">C₂H₄ (乙烯)</label>
+                                <input type="number" id="c2h4" name="C2H4" class="form-input" 
+                                       value="" min="0" max="100" step="0.1" required>
+                            </div>
+                        </div>
+                        
+                        <!-- 组分总和显示 -->
+                        <div id="compositionTotal" style="
+                            margin-top: 1rem;
+                            padding: 0.8rem 1rem;
+                            border-radius: 8px;
+                            font-size: 1rem;
+                            font-weight: 700;
+                            text-align: center;
+                            transition: all 0.3s ease;
+                            background: rgba(255, 193, 7, 0.1);
+                            color: #ffc107;
+                            border: 1px solid rgba(255, 193, 7, 0.3);
+                        ">
+                            气体组分总和：0.0% (请输入各组分含量)
                         </div>
                     </div>
                 </div>
@@ -1138,13 +1198,19 @@
             const efficiency = document.getElementById('efficiency').value;
             
             if (!gasFlowRate || !efficiency) {
-                alert('请填写所有必填项');
+                alert('请填写所有必填项（气体流量和设备效率）');
                 return;
             }
             
             if (parseFloat(efficiency) < 0 || parseFloat(efficiency) > 100) {
                 alert('设备效率应在0-100%之间');
                 return;
+            }
+            
+            // 用户名称是可选的，不需要验证
+            const userName = document.getElementById('userName').value;
+            if (userName && userName.trim()) {
+                console.log(`用户名称: ${userName.trim()}`);
             }
             
             closeModal('basicModal');
@@ -1173,10 +1239,14 @@
 
         function saveCompositionConfig() {
             // 气体组成验证
-            const gasInputs = ['ch4', 'c2h6', 'c3h8', 'c4h10', 'n2', 'co2', 'h2s'];
             const total = gasInputs.reduce((sum, inputId) => {
                 return sum + (parseFloat(document.getElementById(inputId).value) || 0);
             }, 0);
+            
+            if (total === 0) {
+                alert('请输入气体组成（至少一种组分大于0）');
+                return;
+            }
             
             if (Math.abs(total - 100) > 0.1) {
                 alert(`气体组成总和应为100%，当前为：${total.toFixed(2)}%\n请调整各组分的百分比。`);
@@ -1197,24 +1267,28 @@
         async function startSimulation() {
             const data = {};
             
-            // 收集基础参数
-            const gasFlowRateNm3Day = parseFloat(document.getElementById('gasFlowRate').value);
-            if (!gasFlowRateNm3Day) {
-                alert('请先配置基础参数');
+            // 参数校验
+            const validationResult = validateParameters();
+            if (!validationResult.isValid) {
+                alert(validationResult.message);
                 return;
             }
+            
+            // 收集基础参数
+            const gasFlowRateNm3Day = parseFloat(document.getElementById('gasFlowRate').value);
             data.gas_flow_rate = gasFlowRateNm3Day / 24; // 转换为scmh
             data.efficiency = parseFloat(document.getElementById('efficiency').value);
+            
+            // 收集用户信息
+            const userName = document.getElementById('userName').value;
+            if (userName && userName.trim()) {
+                data.user_name = userName.trim();
+            }
             
             // 收集压力温度参数
             const inletPressure = parseFloat(document.getElementById('inletPressure').value);
             const outletPressure = parseFloat(document.getElementById('outletPressure').value);
             const inletTemperature = parseFloat(document.getElementById('inletTemperature').value);
-            
-            if (!inletPressure || !outletPressure || !inletTemperature) {
-                alert('请先配置压力温度参数');
-                return;
-            }
             
             data.inlet_pressure = inletPressure;
             data.inlet_temperature = inletTemperature;
@@ -1222,13 +1296,19 @@
             
             // 收集气体组成
             data.gas_composition = {
-                CH4: parseFloat(document.getElementById('ch4').value),
-                C2H6: parseFloat(document.getElementById('c2h6').value),
-                C3H8: parseFloat(document.getElementById('c3h8').value),
-                C4H10: parseFloat(document.getElementById('c4h10').value),
-                N2: parseFloat(document.getElementById('n2').value),
-                CO2: parseFloat(document.getElementById('co2').value),
-                H2S: parseFloat(document.getElementById('h2s').value)
+                CH4: parseFloat(document.getElementById('ch4').value) || 0,
+                C2H6: parseFloat(document.getElementById('c2h6').value) || 0,
+                C3H8: parseFloat(document.getElementById('c3h8').value) || 0,
+                C4H10: parseFloat(document.getElementById('c4h10').value) || 0,
+                N2: parseFloat(document.getElementById('n2').value) || 0,
+                CO2: parseFloat(document.getElementById('co2').value) || 0,
+                H2S: parseFloat(document.getElementById('h2s').value) || 0,
+                O2: parseFloat(document.getElementById('o2').value) || 0,
+                H2: parseFloat(document.getElementById('h2').value) || 0,
+                H2O: parseFloat(document.getElementById('h2o').value) || 0,
+                HE: parseFloat(document.getElementById('he').value) || 0,
+                C2H2: parseFloat(document.getElementById('c2h2').value) || 0,
+                C2H4: parseFloat(document.getElementById('c2h4').value) || 0
             };
 
             // 验证气体组成总和
@@ -1708,42 +1788,110 @@
             document.getElementById('resultContent').style.display = 'block';
         }
 
-        // 气体组成总和验证和实时提示
-        const gasInputs = ['ch4', 'c2h6', 'c3h8', 'c4h10', 'n2', 'co2', 'h2s'];
-        let totalDisplay = null;
-
-        // 创建总和显示元素
-        function createTotalDisplay() {
-            if (!totalDisplay) {
-                totalDisplay = document.createElement('div');
-                totalDisplay.style.cssText = `
-                    margin-top: 1rem;
-                    padding: 0.5rem 1rem;
-                    border-radius: 8px;
-                    font-size: 0.9rem;
-                    font-weight: 600;
-                    text-align: center;
-                    transition: all 0.3s ease;
-                `;
-                const gasComposition = document.querySelector('#compositionModal .gas-composition');
-                if (gasComposition && gasComposition.parentNode) {
-                    gasComposition.parentNode.appendChild(totalDisplay);
-                }
+        // 参数校验函数
+        function validateParameters() {
+            const result = { isValid: true, message: '' };
+            
+            // 校验基础参数
+            const gasFlowRate = parseFloat(document.getElementById('gasFlowRate').value);
+            const efficiency = parseFloat(document.getElementById('efficiency').value);
+            
+            if (!gasFlowRate || gasFlowRate <= 0) {
+                result.isValid = false;
+                result.message = '请输入有效的气体流量（大于0）';
+                return result;
             }
+            
+            if (!efficiency || efficiency <= 0 || efficiency > 100) {
+                result.isValid = false;
+                result.message = '请输入有效的设备效率（0-100%）';
+                return result;
+            }
+            
+            // 校验压力温度参数
+            const inletPressure = parseFloat(document.getElementById('inletPressure').value);
+            const outletPressure = parseFloat(document.getElementById('outletPressure').value);
+            const inletTemperature = parseFloat(document.getElementById('inletTemperature').value);
+            
+            if (!inletPressure || inletPressure <= 0) {
+                result.isValid = false;
+                result.message = '请输入有效的入口压力（大于0）';
+                return result;
+            }
+            
+            if (!outletPressure || outletPressure <= 0) {
+                result.isValid = false;
+                result.message = '请输入有效的出口压力（大于0）';
+                return result;
+            }
+            
+            if (inletPressure <= outletPressure) {
+                result.isValid = false;
+                result.message = '入口压力必须大于出口压力';
+                return result;
+            }
+            
+            if (inletTemperature === undefined || inletTemperature === null || inletTemperature === '') {
+                result.isValid = false;
+                result.message = '请输入入口温度';
+                return result;
+            }
+            
+            // 校验气体组成
+            const gasComposition = {
+                CH4: parseFloat(document.getElementById('ch4').value) || 0,
+                C2H6: parseFloat(document.getElementById('c2h6').value) || 0,
+                C3H8: parseFloat(document.getElementById('c3h8').value) || 0,
+                C4H10: parseFloat(document.getElementById('c4h10').value) || 0,
+                N2: parseFloat(document.getElementById('n2').value) || 0,
+                CO2: parseFloat(document.getElementById('co2').value) || 0,
+                H2S: parseFloat(document.getElementById('h2s').value) || 0,
+                O2: parseFloat(document.getElementById('o2').value) || 0,
+                H2: parseFloat(document.getElementById('h2').value) || 0,
+                H2O: parseFloat(document.getElementById('h2o').value) || 0,
+                HE: parseFloat(document.getElementById('he').value) || 0,
+                C2H2: parseFloat(document.getElementById('c2h2').value) || 0,
+                C2H4: parseFloat(document.getElementById('c2h4').value) || 0
+            };
+            
+            const totalComposition = Object.values(gasComposition).reduce((sum, val) => sum + val, 0);
+            
+            if (totalComposition === 0) {
+                result.isValid = false;
+                result.message = '请输入气体组成（至少一种组分大于0）';
+                return result;
+            }
+            
+            if (Math.abs(totalComposition - 100) > 0.1) {
+                result.isValid = false;
+                result.message = `气体组分总和必须为100%，当前为：${totalComposition.toFixed(2)}%`;
+                return result;
+            }
+            
+            return result;
         }
+
+        // 气体组成总和验证和实时提示
+        const gasInputs = ['ch4', 'c2h6', 'c3h8', 'c4h10', 'n2', 'co2', 'h2s', 'o2', 'h2', 'h2o', 'he', 'c2h2', 'c2h4'];
 
         function updateCompositionTotal() {
             const total = gasInputs.reduce((sum, inputId) => {
                 return sum + (parseFloat(document.getElementById(inputId).value) || 0);
             }, 0);
             
-            createTotalDisplay();
+            const totalDisplay = document.getElementById('compositionTotal');
+            if (!totalDisplay) return;
             
-            if (Math.abs(total - 100) < 0.1) {
+            if (Math.abs(total - 100) < 0.1 && total > 0) {
                 totalDisplay.style.background = 'rgba(30, 144, 255, 0.1)';
                 totalDisplay.style.color = '#1e90ff';
                 totalDisplay.style.border = '1px solid rgba(30, 144, 255, 0.3)';
                 totalDisplay.textContent = `✓ 气体组成总和: ${total.toFixed(2)}%`;
+            } else if (total === 0) {
+                totalDisplay.style.background = 'rgba(255, 193, 7, 0.1)';
+                totalDisplay.style.color = '#ffc107';
+                totalDisplay.style.border = '1px solid rgba(255, 193, 7, 0.3)';
+                totalDisplay.textContent = `气体组成总和：${total.toFixed(2)}% (请输入各组分含量)`;
             } else {
                 totalDisplay.style.background = 'rgba(255, 193, 7, 0.1)';
                 totalDisplay.style.color = '#ffc107';
@@ -1760,6 +1908,9 @@
                     input.addEventListener('input', updateCompositionTotal);
                 }
             });
+            
+            // 初始化组分总和显示
+            updateCompositionTotal();
         });
 
         // 单位换算提示

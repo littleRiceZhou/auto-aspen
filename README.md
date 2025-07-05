@@ -558,11 +558,11 @@ custom_main_params = MainEngineParams(
         "nitrogen_demand_nm3_h": float          # 氮气需求量(Nm³/h)
     },
     "economic_analysis": {
-        "annual_power_generation": float,    # 年发电量(万kWh)
-        "annual_power_income": float,        # 年发电收益(万元)
-        "annual_coal_savings": float,        # 年节约标煤(万吨)
-        "annual_coal_cost_savings": float,   # 年节煤效益(万元)
-        "annual_co2_reduction": float        # 年CO2减排量(万吨)
+                            "annual_power_generation": float,    # 年发电量(kWh)
+                    "annual_power_income": float,        # 年发电收益(万元)
+                    "annual_coal_savings": float,        # 年节约标煤(吨)
+                    "annual_coal_cost_savings": float,   # 年节煤效益(万元)
+                    "annual_co2_reduction": float        # 年CO2减排量(吨)
     },
     "unit_selection": {
         "unit_selection": float,           # 机组选择(装机功率)
