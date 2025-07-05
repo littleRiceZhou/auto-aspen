@@ -18,7 +18,7 @@
                 radial-gradient(circle at 80% 20%, rgba(100, 149, 237, 0.08) 0%, transparent 50%),
                 radial-gradient(circle at 40% 40%, rgba(70, 130, 180, 0.12) 0%, transparent 50%),
                 linear-gradient(135deg, #ffffff 0%, #f0f8ff 25%, #e6f3ff 50%, #ffffff 100%);
-            color: #2c3e50;
+            color: #000000;
             min-height: 100vh;
             overflow-x: hidden;
         }
@@ -299,7 +299,7 @@
         }
 
         .panel-subtitle {
-            color: #94a3b8;
+            color: #000000;
             font-size: 1rem;
             font-weight: 400;
             opacity: 0.9;
@@ -1389,7 +1389,7 @@
         function displayDetailedConditions(elementId, conditions, title) {
             const element = document.getElementById(elementId);
             if (!conditions || Object.keys(conditions).length === 0) {
-                element.innerHTML = '<div style="color: #64748b; font-style: italic;">暂无数据</div>';
+                element.innerHTML = '<div style="color: #000000; font-style: italic;">暂无数据</div>';
                 return;
             }
 
@@ -1398,8 +1398,8 @@
             if (conditions.pressure !== undefined) {
                 html += `
                     <div style="margin-bottom: 0.5rem;">
-                        <span style="color: #94a3b8; font-size: 0.85rem;">压力：</span>
-                        <span style="color: #e2e8f0; font-weight: 600;">${parseFloat(conditions.pressure).toFixed(2)} bar</span>
+                        <span style="color: #000000; font-size: 0.85rem;">压力：</span>
+                        <span style="color: #000000; font-weight: 600;">${parseFloat(conditions.pressure).toFixed(2)} bar</span>
                     </div>
                 `;
             }
@@ -1407,8 +1407,8 @@
             if (conditions.temperature !== undefined) {
                 html += `
                     <div style="margin-bottom: 0.5rem;">
-                        <span style="color: #94a3b8; font-size: 0.85rem;">温度：</span>
-                        <span style="color: #e2e8f0; font-weight: 600;">${parseFloat(conditions.temperature).toFixed(2)} °C</span>
+                        <span style="color: #000000; font-size: 0.85rem;">温度：</span>
+                        <span style="color: #000000; font-weight: 600;">${parseFloat(conditions.temperature).toFixed(2)} °C</span>
                     </div>
                 `;
             }
@@ -1416,14 +1416,14 @@
             if (conditions.flow_rate !== undefined) {
                 html += `
                     <div style="margin-bottom: 0.5rem;">
-                        <span style="color: #94a3b8; font-size: 0.85rem;">流量：</span>
-                        <span style="color: #e2e8f0; font-weight: 600;">${parseFloat(conditions.flow_rate).toFixed(2)} kmol/hr</span>
+                        <span style="color: #000000; font-size: 0.85rem;">流量：</span>
+                        <span style="color: #000000; font-weight: 600;">${parseFloat(conditions.flow_rate).toFixed(2)} kmol/hr</span>
                     </div>
                 `;
             }
 
             if (html === '') {
-                element.innerHTML = '<div style="color: #64748b; font-style: italic;">数据解析中</div>';
+                element.innerHTML = '<div style="color: #000000; font-style: italic;">数据解析中</div>';
             } else {
                 element.innerHTML = html;
             }
@@ -1432,7 +1432,7 @@
         function displayDetailedMetrics(elementId, metrics, title) {
             const element = document.getElementById(elementId);
             if (!metrics || Object.keys(metrics).length === 0) {
-                element.innerHTML = '<div style="color: #64748b; font-style: italic;">暂无数据</div>';
+                element.innerHTML = '<div style="color: #000000; font-style: italic;">暂无数据</div>';
                 return;
             }
 
@@ -1441,8 +1441,8 @@
             if (metrics.efficiency !== undefined) {
                 html += `
                     <div style="margin-bottom: 0.5rem;">
-                        <span style="color: #94a3b8; font-size: 0.85rem;">效率：</span>
-                        <span style="color: #e2e8f0; font-weight: 600;">${(metrics.efficiency * 100).toFixed(2)}%</span>
+                        <span style="color: #000000; font-size: 0.85rem;">效率：</span>
+                        <span style="color: #000000; font-weight: 600;">${(metrics.efficiency * 100).toFixed(2)}%</span>
                     </div>
                 `;
             }
@@ -1450,8 +1450,8 @@
             if (metrics.pressure_ratio !== undefined) {
                 html += `
                     <div style="margin-bottom: 0.5rem;">
-                        <span style="color: #94a3b8; font-size: 0.85rem;">压比：</span>
-                        <span style="color: #e2e8f0; font-weight: 600;">${metrics.pressure_ratio.toFixed(2)}</span>
+                        <span style="color: #000000; font-size: 0.85rem;">压比：</span>
+                        <span style="color: #000000; font-weight: 600;">${metrics.pressure_ratio.toFixed(2)}</span>
                     </div>
                 `;
             }
@@ -1459,14 +1459,14 @@
             if (metrics.expansion_ratio !== undefined) {
                 html += `
                     <div style="margin-bottom: 0.5rem;">
-                        <span style="color: #94a3b8; font-size: 0.85rem;">膨胀比：</span>
-                        <span style="color: #e2e8f0; font-weight: 600;">${metrics.expansion_ratio.toFixed(2)}</span>
+                        <span style="color: #000000; font-size: 0.85rem;">膨胀比：</span>
+                        <span style="color: #000000; font-weight: 600;">${metrics.expansion_ratio.toFixed(2)}</span>
                     </div>
                 `;
             }
 
             if (html === '') {
-                element.innerHTML = '<div style="color: #64748b; font-style: italic;">数据解析中</div>';
+                element.innerHTML = '<div style="color: #000000; font-style: italic;">数据解析中</div>';
             } else {
                 element.innerHTML = html;
             }
@@ -1485,7 +1485,7 @@
                 grid.innerHTML += `
                     <div class="result-item" style="border-left: 4px solid #ff77c6;">
                         <div class="result-label">设计类型</div>
-                        <div class="result-value" style="color: #ff77c6; font-weight: 800;">${data['设计类型']}</div>
+                        <div class="result-value" style="color: #4169e1; font-weight: 800;">${data['设计类型']}</div>
                     </div>
                 `;
             }
@@ -1494,18 +1494,18 @@
             if (Object.keys(powerDistribution).length > 0) {
                 Object.entries(powerDistribution).forEach(([key, value]) => {
                     let itemStyle = '';
-                    let valueStyle = 'color: #e2e8f0;';
+                    let valueStyle = 'color: #000000;';
                     
                     // 为不同功率类型设置不同颜色
                     if (key === '一级功率') {
-                        itemStyle = 'border-left: 4px solid #78dbff;';
-                        valueStyle = 'color: #78dbff; font-weight: 700;';
+                        itemStyle = 'border-left: 4px solid #1e90ff;';
+                        valueStyle = 'color: #1e90ff; font-weight: 700;';
                     } else if (key === '二级功率') {
-                        itemStyle = 'border-left: 4px solid #7877c6;';
-                        valueStyle = 'color: #7877c6; font-weight: 700;';
+                        itemStyle = 'border-left: 4px solid #4169e1;';
+                        valueStyle = 'color: #4169e1; font-weight: 700;';
                     } else if (key === '总净发电功率') {
-                        itemStyle = 'border-left: 4px solid #00ff88;';
-                        valueStyle = 'color: #00ff88; font-weight: 800;';
+                        itemStyle = 'border-left: 4px solid #00aa44;';
+                        valueStyle = 'color: #00aa44; font-weight: 800;';
                     }
                     
                     const formattedValue = formatNumberValue(key, value);
@@ -1695,7 +1695,7 @@
                     </div>
                     <div class="result-item">
                         <div class="result-label">建议</div>
-                        <div class="result-value" style="color: #94a3b8;">请检查输入参数并重试，或联系技术支持</div>
+                        <div class="result-value" style="color: #000000;">请检查输入参数并重试，或联系技术支持</div>
                     </div>
                 </div>
                 
