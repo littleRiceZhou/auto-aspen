@@ -429,14 +429,14 @@
         .result-panel {
             flex: 1;
             padding: 2.5rem;
-            background: rgba(15, 20, 25, 0.6);
+            background: rgba(225, 227, 228, 0.6);
             overflow-y: auto;
         }
 
 
 
         .result-card {
-            background: rgba(255, 255, 255, 0.9);
+            background: rgba(248, 250, 252, 0.9);
             border: 1px solid rgba(30, 144, 255, 0.2);
             border-radius: 16px;
             padding: 2rem;
@@ -849,13 +849,13 @@
             <div class="config-section">
                 <div class="config-buttons">
                     <button type="button" class="config-btn" onclick="openModal('basicModal')">
-                        🚀 基础参数
+                        基础参数
                     </button>
                     <button type="button" class="config-btn" onclick="openModal('pressureModal')">
-                        🌡️ 压力温度
+                        压力温度
                     </button>
                     <button type="button" class="config-btn" onclick="openModal('compositionModal')">
-                        ⚗️ 气体组成
+                        气体组成
                     </button>
                 </div>
                 <button type="button" class="simulation-btn" onclick="startSimulation()">
@@ -870,7 +870,7 @@
         <div id="basicModal" class="modal">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h3 class="modal-title">🚀 基础参数配置</h3>
+                    <h3 class="modal-title">基础参数配置</h3>
                     <button class="close-btn" onclick="closeModal('basicModal')">&times;</button>
                 </div>
                 <div class="modal-body">
@@ -903,7 +903,7 @@
         <div id="pressureModal" class="modal">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h3 class="modal-title">🌡️ 压力温度参数配置</h3>
+                    <h3 class="modal-title">压力温度参数配置</h3>
                     <button class="close-btn" onclick="closeModal('pressureModal')">&times;</button>
                 </div>
                 <div class="modal-body">
@@ -944,7 +944,7 @@
         <div id="compositionModal" class="modal">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h3 class="modal-title">⚗️ 气体组成参数配置</h3>
+                    <h3 class="modal-title">气体组成参数配置</h3>
                     <button class="close-btn" onclick="closeModal('compositionModal')">&times;</button>
                 </div>
                 <div class="modal-body">
@@ -1003,13 +1003,12 @@
             </div>
         </div>
 
-        <!-- 右侧结果面板 -->
+        <!-- 下面结果面板 -->
         <div class="result-panel">
 
 
             <!-- 空状态 -->
             <div id="emptyState" class="empty-state">
-                <div class="empty-icon">🚀</div>
                 <h3>等待仿真计算</h3>
                 <p>请在顶部输入工艺参数并点击"开始仿真计算"<br>系统将自动运行ASPEN仿真并进行机组选型</p>
             </div>
@@ -1087,10 +1086,9 @@
 
                 <!-- 文档下载 -->
                 <div class="result-card">
-                    <h3 class="card-title">📄 技术文档下载</h3>
+                    <h3 class="card-title">技术文档下载</h3>
                     <div id="documentDownloadContent" class="download-container">
                         <div class="empty-state">
-                            <div class="empty-icon">📄</div>
                             <h3>等待生成技术文档</h3>
                             <p>系统将根据仿真结果自动生成技术报告文档</p>
                         </div>
@@ -1099,10 +1097,9 @@
 
                 <!-- 机组布局图 -->
                 <div class="result-card">
-                    <h3 class="card-title">🏗️ 机组布局示意图</h3>
+                    <h3 class="card-title">机组布局示意图</h3>
                     <div id="diagramContent" class="diagram-container">
                         <div class="empty-state">
-                            <div class="empty-icon">🏗️</div>
                             <h3>等待生成布局图</h3>
                             <p>系统将根据计算结果自动生成机组布局示意图</p>
                         </div>
@@ -1594,11 +1591,10 @@
                 let downloadButtons = '';
                 Object.entries(result.document_urls).forEach(([format, url]) => {
                     const formatUpper = format.toUpperCase();
-                    const icon = format === 'docx' ? '📄' : '📑';
+                    const icon = '';
                     
                     downloadButtons += `
                         <a href="${url}" class="download-btn" download target="_blank">
-                            <span class="download-icon">${icon}</span>
                             <span>下载 ${formatUpper} 文档</span>
                         </a>
                     `;
@@ -1610,18 +1606,17 @@
                             ${downloadButtons}
                         </div>
                         <div class="download-info">
-                            <h4>📋 技术文档说明</h4>
+                            <h4>技术文档说明</h4>
                             <p><strong>设计类型：</strong>${designType}</p>
                             <p><strong>净发电功率：</strong>${netPower}</p>
                             <p><strong>文档内容：</strong>包含完整的仿真结果、机组选型参数、公用工程配置和经济性分析</p>
-                            <p><small>💡 提示：点击下载按钮可获取包含所有计算参数的详细技术报告</small></p>
+                            <p><small>提示：点击下载按钮可获取包含所有计算参数的详细技术报告</small></p>
                         </div>
                     </div>
                 `;
             } else {
                 downloadContent.innerHTML = `
                     <div class="empty-state">
-                        <div class="empty-icon">⚠️</div>
                         <h3>文档生成失败</h3>
                         <p>无法生成技术文档，请检查系统配置或重新计算</p>
                     </div>
@@ -1667,14 +1662,13 @@
                         <img src="${result.diagram_url}" 
                              alt="机组布局示意图" 
                              class="diagram-image"
-                             onerror="this.onerror=null; this.parentElement.innerHTML='<div class=&quot;empty-state&quot;><div class=&quot;empty-icon&quot;>⚠️</div><h3>图片加载失败</h3><p>无法加载机组布局示意图</p></div>';">
+                             onerror="this.onerror=null; this.parentElement.innerHTML='<div class=&quot;empty-state&quot;><h3>图片加载失败</h3><p>无法加载机组布局示意图</p></div>';">
                         ${diagramInfo}
                     </div>
                 `;
             } else {
                 diagramContent.innerHTML = `
                     <div class="empty-state">
-                        <div class="empty-icon">⚠️</div>
                         <h3>布局图生成失败</h3>
                         <p>无法生成机组布局示意图，请检查系统配置</p>
                     </div>
