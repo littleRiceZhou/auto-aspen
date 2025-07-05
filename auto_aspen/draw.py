@@ -163,14 +163,14 @@ def draw_one_level(outer_size=(550, 300), net_power=654, fill_canvas=True):
     return img
 
 
-def draw_two_level(outer_size=(450, 350), net_power=486, one_power=237, fill_canvas=True):
+def draw_two_level(outer_size=(450, 350), net_power=486, one_power=None, fill_canvas=True):
     """
     绘制双级天然气压差发电机组示意图
     
     参数:
     outer_size: 外层矩形尺寸 (width, height) 单位像素
     net_power: 总净发电功率数值 (kW)
-    one_power: 1#透平净发电功率 (kW)
+    one_power: 1#透平净发电功率 (kW)，如果不提供则自动设置为总功率的一半
     fill_canvas: 是否铺满整个画布 (True: 铺满, False: 留边距)
     """
     outer_size = list(outer_size)
@@ -178,7 +178,10 @@ def draw_two_level(outer_size=(450, 350), net_power=486, one_power=237, fill_can
     actual_width = outer_size[0] / 100
     actual_height = outer_size[1] / 100
     
-    two_power = net_power - one_power  # 2#透平功率
+    # 一级二级功率都等于总功率的一半
+    if one_power is None:
+        one_power = net_power / 2
+    two_power = net_power / 2  # 2#透平功率
     
     # 创建图像，白色背景 - 根据内容自适应大小
     if fill_canvas:
@@ -353,7 +356,7 @@ def draw_two_level(outer_size=(450, 350), net_power=486, one_power=237, fill_can
 
 def draw(outer_size=(550, 300), net_power=654, fill_canvas=True):
     if net_power > 1000:
-        return draw_two_level(outer_size, net_power=net_power, one_power=1000, fill_canvas=fill_canvas)
+        return draw_two_level(outer_size, net_power=net_power, fill_canvas=fill_canvas)
     else:
         return draw_one_level(outer_size, net_power=net_power, fill_canvas=fill_canvas)
 

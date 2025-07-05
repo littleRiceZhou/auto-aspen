@@ -770,6 +770,7 @@ def generate_technical_document(aspen_results: Dict[str, Any], power_results: Di
             
             # 用户信息
             "auto_aspen_26": get_user_name(request.user_name),             # 用户名称
+            "auto_aspen_27": get_user_name(request.user_name),             # 用户名称
             
             # 时间参数
             "auto_aspen_time": datetime.datetime.now().strftime("%m/%d/%Y"),  # 当前时间（自动获取）

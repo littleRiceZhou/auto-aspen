@@ -8,6 +8,41 @@ import re
 file_dir = "static/re"
 os.makedirs(file_dir, exist_ok=True)
 
+# 特殊变量字体大小配置
+special_font_size = {
+    "auto_aspen_26": 16,
+    # "auto_aspen_time": 14,
+    # "auto_aspen_7": 12,
+    # "auto_aspen_5": 18,
+}
+
+def get_special_font_config():
+    """
+    获取特殊变量的字体大小配置
+    
+    Returns:
+        dict: 包含特殊变量配置的字典
+    """
+    config = {
+        "special_font_size": special_font_size
+    }
+    
+    print(f"🔧 特殊字体配置: {config}")
+    return config
+
+def get_special_font_for_variable(variable_name):
+    """
+    获取特定变量的特殊字体大小
+    
+    Args:
+        variable_name (str): 变量名（如 'auto_aspen_26'）
+    
+    Returns:
+        float or None: 特殊字体大小，如果不是特殊变量则返回None
+    """
+    config = get_special_font_config()
+    return config.get('special_font_size', {}).get(variable_name)
+
 def get_auto_aspen_parameter_mapping():
     """
     根据文档中的auto_aspen参数创建完整的映射字典
@@ -130,7 +165,7 @@ def replace_text_in_paragraph(paragraph, old_text, new_text, force_font_size=Non
 
 def replace_text_in_single_run(run, old_text, new_text, force_font_size=None):
     """
-    在单个run中替换文本并保持格式
+    在单个run中替换文本并保持格式，支持特殊变量字体大小
     """
     if old_text not in run.text:
         return 0
@@ -160,13 +195,32 @@ def replace_text_in_single_run(run, old_text, new_text, force_font_size=None):
     if original_font_name is not None:
         run.font.name = original_font_name
     
-    # 字体大小设置
-    if force_font_size is not None:
-        run.font.size = Pt(force_font_size)
-        print(f"🔧 强制设置字体大小为: {force_font_size}pt")
-    elif original_font_size is not None:
-        run.font.size = original_font_size
-        print(f"🔧 保持原始字体大小: {original_font_size}")
+    # 智能字体大小设置
+    final_font_size = None
+    font_size_source = ""
+    
+    # 检查是否为特殊变量
+    special_config = get_special_font_config()
+    if old_text in special_config.get('special_font_size', {}):
+        final_font_size = special_config['special_font_size'][old_text]
+        font_size_source = f"特殊变量字体({final_font_size}pt)"
+    else:
+        # 不是特殊变量，使用常规逻辑
+        if force_font_size is not None:
+            final_font_size = force_font_size
+            font_size_source = f"强制字体({final_font_size}pt)"
+        elif original_font_size is not None:
+            # 处理原始字体大小
+            if hasattr(original_font_size, 'pt'):
+                final_font_size = original_font_size.pt
+            else:
+                final_font_size = original_font_size
+            font_size_source = f"原始字体({final_font_size}pt)"
+    
+    # 应用字体大小
+    if final_font_size is not None:
+        run.font.size = Pt(final_font_size)
+        print(f"🔧 应用字体大小: {font_size_source}")
     
     if original_font_color is not None:
         run.font.color.rgb = original_font_color
@@ -256,7 +310,7 @@ def replace_text_across_runs(paragraph, old_text, new_text, force_font_size=None
             run.text = new_run_text
             
             # 保持格式
-            apply_formatting_to_run(run, run_info, force_font_size)
+            apply_formatting_to_run(run, run_info, force_font_size, old_text=old_text)
             replacement_count += 1
             
         else:
@@ -274,11 +328,11 @@ def replace_text_across_runs(paragraph, old_text, new_text, force_font_size=None
             
             # 设置第一个run
             first_run.text = new_first_run_text
-            apply_formatting_to_run(first_run, affected_runs[0], force_font_size)
+            apply_formatting_to_run(first_run, affected_runs[0], force_font_size, old_text=old_text)
             
             # 设置最后一个run
             last_run.text = new_last_run_text
-            apply_formatting_to_run(last_run, affected_runs[-1], force_font_size)
+            apply_formatting_to_run(last_run, affected_runs[-1], force_font_size, old_text=old_text)
             
             # 清空中间的runs
             for run_info in affected_runs[1:-1]:
@@ -289,9 +343,15 @@ def replace_text_across_runs(paragraph, old_text, new_text, force_font_size=None
     print(f"✅ 跨run替换完成: {replacement_count}次")
     return replacement_count
 
-def apply_formatting_to_run(run, run_info, force_font_size=None):
+def apply_formatting_to_run(run, run_info, force_font_size=None, old_text=None):
     """
-    应用格式到run
+    应用格式到run，支持特殊变量的特殊字体大小
+    
+    Args:
+        run: docx run对象
+        run_info: run的格式信息
+        force_font_size: 强制字体大小
+        old_text: 被替换的原始文本，用于判断是否为特殊变量
     """
     if run_info['bold'] is not None:
         run.bold = run_info['bold']
@@ -302,11 +362,34 @@ def apply_formatting_to_run(run, run_info, force_font_size=None):
     if run_info['font_name'] is not None:
         run.font.name = run_info['font_name']
     
-    # 字体大小设置
-    if force_font_size is not None:
-        run.font.size = Pt(force_font_size)
-    elif run_info['font_size'] is not None:
-        run.font.size = run_info['font_size']
+    # 智能字体大小设置
+    final_font_size = None
+    font_size_source = ""
+    
+    # 检查是否为特殊变量
+    if old_text:
+        special_config = get_special_font_config()
+        if old_text in special_config.get('special_font_size', {}):
+            final_font_size = special_config['special_font_size'][old_text]
+            font_size_source = f"特殊变量字体({final_font_size}pt)"
+    
+    # 如果不是特殊变量，使用常规逻辑
+    if final_font_size is None:
+        if force_font_size is not None:
+            final_font_size = force_font_size
+            font_size_source = f"强制字体({final_font_size}pt)"
+        elif run_info['font_size'] is not None:
+            # 处理原始字体大小
+            if hasattr(run_info['font_size'], 'pt'):
+                final_font_size = run_info['font_size'].pt
+            else:
+                final_font_size = run_info['font_size']
+            font_size_source = f"原始字体({final_font_size}pt)"
+    
+    # 应用字体大小
+    if final_font_size is not None:
+        run.font.size = Pt(final_font_size)
+        print(f"🔧 应用字体大小: {font_size_source}")
     
     if run_info['font_color'] is not None:
         run.font.color.rgb = run_info['font_color']
