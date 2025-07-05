@@ -1112,24 +1112,24 @@
             <div id="resultContent" style="display: none;">
                 <!-- 仿真概况 -->
                 <div class="result-card">
-                    <h3 class="card-title">📈 仿真概况</h3>
+                    <h3 class="card-title"> 仿真概况</h3>
                     <div class="result-grid">
                         <div class="result-item">
-                            <div class="result-label">🎯 总体状态</div>
+                            <div class="result-label"> 总体状态</div>
                             <div class="result-value" id="overallStatus">
                                 <span class="status-indicator status-success">成功</span>
                             </div>
                         </div>
                         <div class="result-item">
-                            <div class="result-label">🔬 ASPEN仿真</div>
+                            <div class="result-label"> ASPEN仿真</div>
                             <div class="result-value" id="aspenStatus">等待中</div>
                         </div>
                         <div class="result-item">
-                            <div class="result-label">⚡ 功率计算</div>
+                            <div class="result-label"> 功率计算</div>
                             <div class="result-value" id="powerStatus">等待中</div>
                         </div>
                         <div class="result-item">
-                            <div class="result-label">⏱️ 仿真时间</div>
+                            <div class="result-label"> 仿真时间</div>
                             <div class="result-value" id="simulationTime">计算中</div>
                         </div>
                     </div>
@@ -1137,18 +1137,18 @@
 
                 <!-- ASPEN仿真结果 -->
                 <div class="result-card">
-                    <h3 class="card-title">📊 ASPEN仿真结果</h3>
+                    <h3 class="card-title"> ASPEN仿真结果</h3>
                     <div class="result-grid">
                         <div class="result-item">
-                            <div class="result-label">⚡ 功率输出</div>
+                            <div class="result-label"> 功率输出</div>
                             <div class="result-value" id="powerOutput">计算中</div>
                         </div>
                         <div class="result-item">
-                            <div class="result-label">⚙️ 设计参数</div>
+                            <div class="result-label"> 设计参数</div>
                             <div class="result-value" id="inletConditions">分析中</div>
                         </div>
                         <div class="result-item">
-                            <div class="result-label">🔧 出口条件</div>
+                            <div class="result-label"> 输入条件</div>
                             <div class="result-value" id="outletConditions">分析中</div>
                         </div>
                     </div>
@@ -1156,7 +1156,7 @@
 
                 <!-- 机组选型结果 -->
                 <div class="result-card">
-                    <h3 class="card-title">🏭 机组选型结果</h3>
+                    <h3 class="card-title"> 机组选型结果</h3>
                     <div id="unitSelectionGrid" class="result-grid">
                         <!-- 动态生成 -->
                     </div>
@@ -1164,7 +1164,7 @@
 
                 <!-- 经济性分析 -->
                 <div class="result-card">
-                    <h3 class="card-title">💰 经济性分析</h3>
+                    <h3 class="card-title"> 经济性分析</h3>
                     <div id="economicGrid" class="result-grid">
                         <!-- 动态生成 -->
                     </div>
@@ -1172,7 +1172,7 @@
 
                 <!-- 文档下载 -->
                 <div class="result-card">
-                    <h3 class="card-title">📄 技术文档下载</h3>
+                    <h3 class="card-title"> 技术文档下载</h3>
                     <div id="documentDownloadContent" class="download-container">
                         <div class="empty-state">
                             <h3>等待生成技术文档</h3>
@@ -1183,7 +1183,7 @@
 
                 <!-- 机组布局图 -->
                 <div class="result-card">
-                    <h3 class="card-title">🏗️ 机组布局示意图</h3>
+                    <h3 class="card-title"> 机组布局示意图</h3>
                     <div id="diagramContent" class="diagram-container">
                         <div class="empty-state">
                             <h3>等待生成布局图</h3>
@@ -1496,7 +1496,10 @@
             
             // 3. 出口条件模块 - 显示出口压力
             const outletData = {
-                outlet_pressure: aspenSimulationData.outlet_pressure
+                outlet_pressure: aspenSimulationData.outlet_pressure,
+                inlet_pressure: aspenSimulationData.inlet_pressure,
+                inlet_temperature: aspenSimulationData.inlet_temperature,
+
             };
             displayOutletConditions('outletConditions', outletData, '出口条件');
 
@@ -1713,7 +1716,15 @@
                             <div class="result-value" style="${valueStyle}">${formattedValue}</div>
                         </div>
                     `;
-                } else {
+                }  else if (key.includes('进/排气')) {
+                    grid.innerHTML += `
+                        <div class="result-item" style="${itemStyle}">
+                            <div class="result-label">${key}</div>
+                            <div class="result-value" style="${valueStyle}">${value}</div>
+                        </div>
+                    `;
+                }
+                else {
                     const formattedValue = formatNumberValue(key, value);
                     grid.innerHTML += `
                         <div class="result-item" style="${itemStyle}">
@@ -2125,6 +2136,30 @@
                         <div style="margin-bottom: 0.5rem;">
                             <span style="color: #000000; font-size: 0.85rem;">出口压力(MPa(A))：</span>
                             <span style="color: #000000; font-weight: 600;">${parseFloat(data.outlet_pressure).toFixed(2)}</span>
+                        </div>
+                    `;
+                }
+                if (data.inlet_pressure !== undefined && data.inlet_pressure !== null) {
+                    html += `
+                        <div style="margin-bottom: 0.5rem;">
+                            <span style="color: #000000; font-size: 0.85rem;">入口压力(MPa(A))：</span>
+                            <span style="color: #000000; font-weight: 600;">${parseFloat(data.inlet_pressure).toFixed(2)}</span>
+                        </div>
+                    `;
+                }
+                if (data.inlet_temperature !== undefined && data.inlet_temperature !== null) {
+                    html += `
+                        <div style="margin-bottom: 0.5rem;">
+                            <span style="color: #000000; font-size: 0.85rem;">入口温度(℃)：</span>
+                            <span style="color: #000000; font-weight: 600;">${parseFloat(data.inlet_temperature).toFixed(2)}</span>
+                        </div>
+                    `;
+                }
+                if (data.outlet_temperature !== undefined && data.outlet_temperature !== null) {
+                    html += `
+                        <div style="margin-bottom: 0.5rem;">
+                            <span style="color: #000000; font-size: 0.85rem;">出口温度(℃)：</span>
+                            <span style="color: #000000; font-weight: 600;">${parseFloat(data.outlet_temperature).toFixed(2)}</span>
                         </div>
                     `;
                 }
