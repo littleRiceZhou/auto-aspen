@@ -7,23 +7,48 @@ import tempfile
 import shutil
 from datetime import datetime
 import numpy as np
-import win32com.client as win32
 from typing import Dict, Any, Optional, List, Tuple
 from dataclasses import dataclass, field
 from loguru import logger
+
+
+def _env_truthy(name: str, default: bool = False) -> bool:
+    v = os.environ.get(name, "")
+    if not v or not str(v).strip():
+        return default
+    return str(v).strip().lower() in ("1", "true", "yes", "on")
+
+
+def is_aspen_mock_mode() -> bool:
+    """为 True 时不连接 Aspen Plus COM，用简化公式生成与接口兼容的模拟数据。"""
+    return _env_truthy("AUTO_ASPEN_MOCK", False)
+
+
+def _get_win32():
+    """仅在非模拟模式导入，避免 Linux 等环境因缺少 pywin32 而无法加载本模块。"""
+    import win32com.client as win32
+    return win32
 
 
 class PyASPENPlus(object):
     """使用Python运行ASPEN模拟"""
 
     def __init__(self):
-        pass
+        self._mock_mode = False
 
     def init_app(self, ap_version: str = '14.0'):
         """开启ASPEN Plus
 
         :param ap_version: ASPEN Plus版本号, defaults to '14.0'
         """
+        if is_aspen_mock_mode():
+            logger.info("AUTO_ASPEN_MOCK=1: 模拟模式，跳过 Aspen Plus COM 连接")
+            self._mock_mode = True
+            self.app = None
+            return
+
+        self._mock_mode = False
+        win32 = _get_win32()
         # 尝试多种可能的COM类标识符
         possible_com_classes = [
             'Apwn.Document',  # 最常用的
@@ -50,7 +75,7 @@ class PyASPENPlus(object):
         for com_class in possible_com_classes:
             try:
                 logger.debug(f"尝试连接COM类: {com_class}")
-                self.app = win32.Dispatch(com_class)
+                self.app = win32.Dispatch(com_class)  # type: ignore
                 logger.info(f"成功连接到: {com_class}")
                 return
             except Exception as e:
@@ -69,6 +94,11 @@ class PyASPENPlus(object):
         :param visible: 是否显示ASPEN界面，默认为False
         :param dialogs: 是否显示对话框，默认为False
         """
+        if getattr(self, "_mock_mode", False):
+            self.file_dir = os.getcwd() if file_dir is None else file_dir
+            logger.info(f'AUTO_ASPEN_MOCK: 跳过载入 "{file_name}"（不真实调用 Aspen）')
+            return
+
         # 文件类型检查 - 支持 .bkp 和 .apwz 格式
         file_ext = os.path.splitext(file_name)[1].lower()
         if file_ext not in ['.bkp', '.apwz']:
@@ -169,6 +199,10 @@ class PyASPENPlus(object):
         :param reinit: 是否重新初始化迭代参数设置, defaults to True
         :param sleep: 每次检测运行状态的间隔时长, defaults to 2.0
         """
+        if getattr(self, "_mock_mode", False):
+            logger.info("AUTO_ASPEN_MOCK: 跳过 Engine.Run2")
+            return
+
         if reinit:
             self.app.Reinit()
         
@@ -178,6 +212,9 @@ class PyASPENPlus(object):
 
     def check_simulation_status(self) -> list:
         """检查模拟是否收敛等"""
+        if getattr(self, "_mock_mode", False):
+            return [True]
+
         try:
             value = self.app.Tree.FindNode(r'\Data\Results Summary\Run-Status\Output\RUNID').Value
             file_path = self.file_dir + '\\' + value + '.his'
@@ -198,6 +235,9 @@ class PyASPENPlus(object):
         
         :param auto_discover: 是否自动发现可用的数据属性，默认为True
         """
+        if getattr(self, "_mock_mode", False):
+            return mock_aspen_results_dict(SimulationParameters())
+
         result = {
             "timestamp": datetime.now().isoformat(),
             "success": False,
@@ -539,14 +579,20 @@ class PyASPENPlus(object):
         return properties
 
     def quit_app(self):
+        if getattr(self, "_mock_mode", False):
+            return
         self.app.Quit()
 
     def close_app(self):
+        if getattr(self, "_mock_mode", False):
+            return
         self.app.Close()
 
     def __del__(self):
         """析构函数，确保资源被正确清理"""
         try:
+            if getattr(self, "_mock_mode", False):
+                return
             if hasattr(self, 'app') and self.app is not None:
                 logger.debug("正在清理ASPEN Plus资源")
                 
@@ -597,6 +643,9 @@ class PyASPENPlus(object):
 
     def save_as(self, filename: str):
         """另存为文件"""
+        if getattr(self, "_mock_mode", False):
+            logger.info("AUTO_ASPEN_MOCK: 跳过 SaveAs")
+            return False
         try:
             full_path = os.path.join(self.file_dir, filename)
             self.app.SaveAs(full_path)
@@ -627,6 +676,13 @@ class PyASPENPlus(object):
             if not os.path.exists(file_name if file_dir is None else os.path.join(file_dir, file_name)):
                 logger.error(f"文件 {file_name} 不存在")
                 return False
+
+            if is_aspen_mock_mode():
+                logger.info("AUTO_ASPEN_MOCK: PyASPENPlus.run 使用模拟数据，不启动 Aspen")
+                mock_dict = mock_aspen_results_dict(SimulationParameters())
+                if return_json:
+                    return mock_dict
+                return bool(mock_dict.get("success"))
             
             # 检查应用是否已经初始化
             if not hasattr(self, 'app') or self.app is None:
@@ -856,6 +912,70 @@ class SimulationResult:
             return False
 
 
+def _estimate_power_kw_from_params(params: "SimulationParameters") -> float:
+    """与 main.run_aspen_simulation_internal 中无功率时的简化估算一致。"""
+    pressure_diff = abs(params.inlet_pressure - params.outlet_pressure)
+    return float(params.gas_flow_rate * pressure_diff * 0.002)
+
+
+def _build_mock_expander_block(params: "SimulationParameters") -> Dict[str, Any]:
+    power = _estimate_power_kw_from_params(params)
+    eff = params.efficiency / 100.0
+    p_ratio = (params.inlet_pressure / params.outlet_pressure) if params.outlet_pressure > 0 else 1.0
+    out_temp = params.inlet_temperature - 10.0
+    inlet_bar = params.inlet_pressure * 10.0
+    outlet_bar = params.outlet_pressure * 10.0
+    pv = -power
+    return {
+        "制动马力": {"value": pv, "unit": "kW", "name": "制动马力", "path": "", "key": "brake_power"},
+        "净功要求": {"value": pv, "unit": "kW", "name": "净功要求", "path": "", "key": "net_power"},
+        "指示马力": {"value": pv * 1.02, "unit": "kW", "name": "指示马力", "path": "", "key": "indicated_power"},
+        "效率": {"value": eff, "unit": "", "name": "效率", "path": "", "key": "efficiency"},
+        "压力比": {"value": p_ratio, "unit": "", "name": "压力比", "path": "", "key": "pressure_ratio"},
+        "入口压力": {"value": inlet_bar, "unit": "bar", "name": "入口压力", "path": "", "key": "inlet_pressure"},
+        "出口压力": {"value": outlet_bar, "unit": "bar", "name": "出口压力", "path": "", "key": "outlet_pressure"},
+        "出口温度": {"value": out_temp, "unit": "°C", "name": "出口温度", "path": "", "key": "outlet_temperature"},
+    }
+
+
+def mock_aspen_results_dict(params: "SimulationParameters") -> Dict[str, Any]:
+    """与 get_simulation_results() 返回结构兼容（供模拟模式与测试使用）。"""
+    power = _estimate_power_kw_from_params(params)
+    expander = _build_mock_expander_block(params)
+    return {
+        "timestamp": datetime.now().isoformat(),
+        "success": True,
+        "errors": [],
+        "warnings": ["AUTO_ASPEN_MOCK: 模拟数据，非 Aspen Plus 真机计算"],
+        "streams": {
+            "INLET": {
+                "temperature": {"value": params.inlet_temperature, "unit": "°C"},
+                "pressure": {"value": params.inlet_pressure * 10.0, "unit": "bar"},
+            }
+        },
+        "blocks": {"EXPANDER": expander},
+        "summary": {
+            "stream_count": 1,
+            "block_count": 1,
+            "mock_mode": True,
+            "estimated_power_kw": power,
+        },
+        "model_info": {"mode": "mock"},
+    }
+
+
+def mock_simulation_result_object(params: "SimulationParameters") -> "SimulationResult":
+    d = mock_aspen_results_dict(params)
+    r = SimulationResult()
+    r.success = d["success"]
+    r.errors = list(d["errors"])
+    r.warnings = list(d["warnings"])
+    r.streams = d["streams"]
+    r.blocks = d["blocks"]
+    r.summary = d["summary"]
+    return r
+
+
 class APWZSimulator:
     """APWZ仿真器类"""
     
@@ -870,6 +990,8 @@ class APWZSimulator:
         self.aspen_version = aspen_version
         self.aspen: Optional[PyASPENPlus] = None
         self.is_initialized = False
+        self._mock_mode = False
+        self._last_parameters: Optional[SimulationParameters] = None
         
     def __enter__(self):
         """上下文管理器入口"""
@@ -882,10 +1004,23 @@ class APWZSimulator:
     def initialize(self, visible: bool = True, dialogs: bool = False) -> bool:
         """初始化ASPEN应用"""
         try:
+            if is_aspen_mock_mode():
+                if not os.path.exists(self.apwz_file):
+                    logger.warning(
+                        f"AUTO_ASPEN_MOCK: 未找到 APWZ 路径 {self.apwz_file}，模拟模式仍继续（结果不依赖该文件）"
+                    )
+                else:
+                    logger.info(f"AUTO_ASPEN_MOCK: 使用 APWZ 路径 {self.apwz_file}（不会真实打开）")
+                self.aspen = None
+                self._mock_mode = True
+                self.is_initialized = True
+                return True
+
             if not os.path.exists(self.apwz_file):
                 logger.error(f"文件 {self.apwz_file} 不存在")
                 return False
             
+            self._mock_mode = False
             # 创建 ASPEN Plus 实例
             self.aspen = PyASPENPlus()
             
@@ -907,7 +1042,16 @@ class APWZSimulator:
     
     def set_parameters(self, parameters: SimulationParameters) -> bool:
         """设置仿真参数"""
-        if not self.is_initialized or not self.aspen:
+        if not self.is_initialized:
+            logger.error("ASPEN 应用未初始化")
+            return False
+
+        if self._mock_mode:
+            self._last_parameters = parameters
+            logger.info("AUTO_ASPEN_MOCK: 已记录仿真参数（未写入 Aspen 变量树）")
+            return True
+        
+        if not self.aspen:
             logger.error("ASPEN 应用未初始化")
             return False
         
@@ -1019,6 +1163,8 @@ class APWZSimulator:
     
     def _set_parameter_by_paths(self, paths: List[str], value: float, param_name: str) -> bool:
         """通过路径列表设置参数"""
+        if self._mock_mode:
+            return True
         for path in paths:
             try:
                 node = self.aspen.app.Tree.FindNode(path)
@@ -1034,7 +1180,15 @@ class APWZSimulator:
     
     def run_simulation(self, reinit: bool = True, sleep: float = 2.0) -> bool:
         """运行仿真"""
-        if not self.is_initialized or not self.aspen:
+        if not self.is_initialized:
+            logger.error("ASPEN 应用未初始化")
+            return False
+
+        if self._mock_mode:
+            logger.info("AUTO_ASPEN_MOCK: 跳过仿真运行")
+            return True
+        
+        if not self.aspen:
             logger.error("ASPEN 应用未初始化")
             return False
         
@@ -1057,7 +1211,16 @@ class APWZSimulator:
         """获取仿真结果"""
         result = SimulationResult()
         
-        if not self.is_initialized or not self.aspen:
+        if not self.is_initialized:
+            result.add_error("ASPEN 应用未初始化")
+            return result
+
+        if self._mock_mode:
+            params = self._last_parameters if self._last_parameters is not None else SimulationParameters()
+            logger.info("AUTO_ASPEN_MOCK: 返回模拟仿真结果")
+            return mock_simulation_result_object(params)
+        
+        if not self.aspen:
             result.add_error("ASPEN 应用未初始化")
             return result
         
@@ -1098,6 +1261,14 @@ class APWZSimulator:
     
     def close(self) -> None:
         """关闭ASPEN应用"""
+        if self._mock_mode:
+            self.aspen = None
+            self.is_initialized = False
+            self._mock_mode = False
+            self._last_parameters = None
+            logger.info("AUTO_ASPEN_MOCK: 模拟会话已结束")
+            return
+
         if self.aspen:
             try:
                 self.aspen.close_app()

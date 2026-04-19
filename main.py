@@ -5,14 +5,21 @@ FastAPI接口服务
 提供综合仿真计算接口，结合ASPEN仿真和机组功率计算
 """
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Body
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
-from typing import Dict, Any, Optional
+from pydantic import BaseModel, Field, ValidationError
+from typing import Dict, Any, Optional, List
 import traceback
 import os
 import getpass
+
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass
 from loguru import logger
 import datetime
 
@@ -21,8 +28,9 @@ from auto_aspen.power_calculations import (
     PowerCalculations, MainEngineParams, UtilityParams, 
     EconomicParams, UnitSelectionParams
 )
-from auto_aspen import SimulationParameters, APWZSimulator
+from auto_aspen import SimulationParameters, APWZSimulator, is_aspen_mock_mode
 from auto_aspen.docx_pdf import generate_document, get_auto_aspen_parameter_mapping
+from auto_aspen.chat_stream import ChatStreamRequest, stream_chat_sse
 
 # 创建FastAPI应用
 app = FastAPI(
@@ -105,6 +113,7 @@ class SimulationResponse(BaseModel):
     document_urls: Optional[Dict[str, str]] = Field(None, description="文档下载地址")
     error_message: Optional[str] = Field(None, description="错误信息")
 
+
 # ============ API路由定义 ============
 
 @app.get("/")
@@ -112,10 +121,63 @@ async def root():
     """index.html"""
     return FileResponse("index.html")
 
+
+@app.get("/chat")
+async def chat_page():
+    """对话页（单一流式接口）"""
+    return FileResponse("chat.html")
+
+
 @app.get("/health")
 async def health_check():
     """健康检查"""
     return {"status": "healthy", "message": "API service is running"}
+
+
+@app.get("/api/chat/default-params")
+async def chat_default_params():
+    """
+    左侧工况表单默认值：与 `SimulationParameters` 一致；气体组分全 0 时置甲烷 100% 便于试填。
+    """
+    p = SimulationParameters()
+    d = p.to_dict()
+    gc = dict(d.get("gas_composition") or {})
+    try:
+        s = sum(float(v or 0) for v in gc.values())
+    except (TypeError, ValueError):
+        s = 0.0
+    if s == 0:
+        gc["CH4"] = 100.0
+    return {
+        "gas_flow_rate": d["gas_flow_rate"],
+        "inlet_pressure": d["inlet_pressure"],
+        "inlet_temperature": d["inlet_temperature"],
+        "outlet_pressure": d["outlet_pressure"],
+        "efficiency": d["efficiency"],
+        "gas_composition": gc,
+        "other_requirements": d.get("other_requirements", ""),
+        "user_name": None,
+    }
+
+
+@app.post("/api/chat/stream")
+async def chat_stream(body: ChatStreamRequest):
+    """
+    唯一对话流式接口（SSE）。
+    基于 `openai-agents`：`Agent` + `Runner.run_streamed`。
+    请求体可含 **partial_params**（左侧表单快照）；服务端每次在对话前注入一条 system 消息携带该 JSON。
+    事件：type=delta（文本增量）、type=status（状态）、type=done、type=error；最后 data: [DONE]。
+    """
+    return StreamingResponse(
+        stream_chat_sse(body),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
 
 @app.post("/api/simulation", response_model=SimulationResponse)
 async def run_comprehensive_simulation(request: SimulationRequest):
@@ -125,110 +187,7 @@ async def run_comprehensive_simulation(request: SimulationRequest):
     先运行ASPEN仿真获取功率输出，然后基于该功率进行机组选型计算
     返回完整的仿真和选型结果
     """
-    import time
-    start_time = time.time()
-    
-    try:
-        logger.info("开始综合仿真计算")
-        
-        # Step 1: 运行ASPEN仿真
-        logger.info("Step 1: 运行ASPEN仿真")
-        aspen_results = await run_aspen_simulation_internal(request)
-        
-        if not aspen_results["success"]:
-            return SimulationResponse(
-                success=False,
-                error_message=f"ASPEN仿真失败: {aspen_results.get('error_message')}"
-            )
-        
-        # Step 2: 从ASPEN结果中获取主机功率
-        aspen_power_output = aspen_results.get("simulation_results", {}).get("power_output")
-        if aspen_power_output is not None and aspen_power_output > 0:
-            main_power = float(aspen_power_output)
-            logger.info(f"使用ASPEN仿真得到的功率: {main_power} kW")
-        else:
-            # 如果ASPEN结果中没有功率数据，使用基于参数的估算值
-            logger.warning("ASPEN仿真未返回有效功率，使用估算值继续计算")
-            pressure_diff = request.inlet_pressure - request.outlet_pressure
-            # 基于经验公式估算功率 (简化)
-            main_power = request.gas_flow_rate * pressure_diff * request.efficiency / 100 * 0.001
-            main_power = max(main_power, 10.0)  # 最小值保护
-            
-            # 更新ASPEN结果中的功率输出
-            if "simulation_results" in aspen_results:
-                aspen_results["simulation_results"]["power_output"] = main_power
-            
-            logger.info(f"使用估算的主机功率: {main_power} kW")
-        
-        # Step 3: 运行功率计算
-        logger.info(f"Step 2: 运行功率计算，主机功率: {main_power} kW")
-        power_results = await run_power_calculation_internal(main_power, aspen_results)
-        
-        if not power_results["success"]:
-            return SimulationResponse(
-                success=False,
-                aspen_results=aspen_results,
-                error_message=f"功率计算失败: {power_results.get('error_message')}"
-            )
-        
-        # Step 4: 计算仿真时间并合并结果
-        end_time = time.time()
-        simulation_duration = end_time - start_time
-        
-        # 将仿真时间添加到ASPEN结果中
-        if "simulation_results" in aspen_results:
-            aspen_results["simulation_results"]["simulation_time"] = f"{simulation_duration:.2f}秒"
-        
-        # Step 3: 生成机组布局图
-        logger.info("Step 3: 生成机组布局图")
-        diagram_result = generate_diagram_file(power_results)
-        diagram_url = None
-        if diagram_result["success"]:
-            diagram_url = diagram_result["diagram_url"]
-            logger.info(f"机组布局图已生成: {diagram_url}")
-        else:
-            logger.warning(f"机组布局图生成失败: {diagram_result.get('error')}")
-        
-        # Step 4: 生成技术文档
-        logger.info("Step 4: 生成技术文档")
-        # 从机组布局图结果中获取文件路径
-        diagram_file_path = None
-        if diagram_result["success"]:
-            diagram_file_path = diagram_result.get("file_path")
-            
-        document_result = generate_technical_document(aspen_results, power_results, request, diagram_file_path)
-        document_urls = None
-        if document_result["success"]:
-            document_urls = document_result["document_urls"]
-            logger.info(f"技术文档已生成: {document_urls}")
-        else:
-            logger.warning(f"技术文档生成失败: {document_result.get('error')}")
-        
-        # Step 5: 合并仿真结果
-        logger.info("Step 5: 合并仿真结果")
-        combined_results = create_combined_results(aspen_results, power_results, request, document_urls)
-        
-        logger.info(f"✅ 综合仿真计算成功完成，耗时: {simulation_duration:.2f}秒")
-        
-        return SimulationResponse(
-            success=True,
-            aspen_results=aspen_results,
-            power_results=power_results,
-            combined_results=combined_results,
-            diagram_url=diagram_url,
-            document_urls=document_urls
-        )
-        
-    except Exception as e:
-        end_time = time.time()
-        simulation_duration = end_time - start_time
-        error_msg = f"综合仿真计算失败: {str(e)}"
-        logger.error(f"{error_msg}\n{traceback.format_exc()}")
-        logger.error(f"仿真失败，耗时: {simulation_duration:.2f}秒")
-        return SimulationResponse(
-            success=False,
-            error_message=error_msg
-        )
+    return await execute_comprehensive_simulation(request)
 
 # ============ 内部辅助函数 ============
 
@@ -262,6 +221,9 @@ def get_user_name(request_user_name: str = None) -> str:
 async def run_aspen_simulation_internal(request: SimulationRequest) -> Dict[str, Any]:
     """内部ASPEN仿真函数"""
     try:
+        if is_aspen_mock_mode():
+            logger.info("AUTO_ASPEN_MOCK=1: Aspen Plus 使用模拟数据，流程与真机一致")
+
         # 从环境变量获取APWZ文件路径
         apwz_file_path = os.getenv("ASPEN_APWZ_FILE_PATH", "./models/RE-Expander.apwz")
         logger.info(f"使用APWZ文件: {apwz_file_path}")
@@ -1001,6 +963,124 @@ def create_combined_results(aspen_results: Dict[str, Any], power_results: Dict[s
     except Exception as e:
         logger.error(f"创建综合结果失败: {str(e)}")
         return {"error": f"创建综合结果失败: {str(e)}"}
+
+
+async def execute_comprehensive_simulation(request: SimulationRequest) -> SimulationResponse:
+    """
+    综合仿真核心逻辑，供 /api/simulation 与未来 Agent 工具复用。
+    """
+    import time
+    start_time = time.time()
+
+    try:
+        logger.info("开始综合仿真计算")
+
+        logger.info("Step 1: 运行ASPEN仿真")
+        aspen_results = await run_aspen_simulation_internal(request)
+
+        if not aspen_results["success"]:
+            return SimulationResponse(
+                success=False,
+                error_message=f"ASPEN仿真失败: {aspen_results.get('error_message')}"
+            )
+
+        aspen_power_output = aspen_results.get("simulation_results", {}).get("power_output")
+        if aspen_power_output is not None and aspen_power_output > 0:
+            main_power = float(aspen_power_output)
+            logger.info(f"使用ASPEN仿真得到的功率: {main_power} kW")
+        else:
+            logger.warning("ASPEN仿真未返回有效功率，使用估算值继续计算")
+            pressure_diff = request.inlet_pressure - request.outlet_pressure
+            main_power = request.gas_flow_rate * pressure_diff * request.efficiency / 100 * 0.001
+            main_power = max(main_power, 10.0)
+
+            if "simulation_results" in aspen_results:
+                aspen_results["simulation_results"]["power_output"] = main_power
+
+            logger.info(f"使用估算的主机功率: {main_power} kW")
+
+        logger.info(f"Step 2: 运行功率计算，主机功率: {main_power} kW")
+        power_results = await run_power_calculation_internal(main_power, aspen_results)
+
+        if not power_results["success"]:
+            return SimulationResponse(
+                success=False,
+                aspen_results=aspen_results,
+                error_message=f"功率计算失败: {power_results.get('error_message')}"
+            )
+
+        end_time = time.time()
+        simulation_duration = end_time - start_time
+
+        if "simulation_results" in aspen_results:
+            aspen_results["simulation_results"]["simulation_time"] = f"{simulation_duration:.2f}秒"
+
+        logger.info("Step 3: 生成机组布局图")
+        diagram_result = generate_diagram_file(power_results)
+        diagram_url = None
+        if diagram_result["success"]:
+            diagram_url = diagram_result["diagram_url"]
+            logger.info(f"机组布局图已生成: {diagram_url}")
+        else:
+            logger.warning(f"机组布局图生成失败: {diagram_result.get('error')}")
+
+        logger.info("Step 4: 生成技术文档")
+        diagram_file_path = None
+        if diagram_result["success"]:
+            diagram_file_path = diagram_result.get("file_path")
+
+        document_result = generate_technical_document(aspen_results, power_results, request, diagram_file_path)
+        document_urls = None
+        if document_result["success"]:
+            document_urls = document_result["document_urls"]
+            logger.info(f"技术文档已生成: {document_urls}")
+        else:
+            logger.warning(f"技术文档生成失败: {document_result.get('error')}")
+
+        logger.info("Step 5: 合并仿真结果")
+        combined_results = create_combined_results(aspen_results, power_results, request, document_urls)
+
+        logger.info(f"✅ 综合仿真计算成功完成，耗时: {simulation_duration:.2f}秒")
+
+        return SimulationResponse(
+            success=True,
+            aspen_results=aspen_results,
+            power_results=power_results,
+            combined_results=combined_results,
+            diagram_url=diagram_url,
+            document_urls=document_urls
+        )
+
+    except Exception as e:
+        end_time = time.time()
+        simulation_duration = end_time - start_time
+        error_msg = f"综合仿真计算失败: {str(e)}"
+        logger.error(f"{error_msg}\n{traceback.format_exc()}")
+        logger.error(f"仿真失败，耗时: {simulation_duration:.2f}秒")
+        return SimulationResponse(
+            success=False,
+            error_message=error_msg
+        )
+
+
+def build_simulation_request_from_merged(merged: Dict[str, Any]) -> tuple[Optional[SimulationRequest], List[str]]:
+    """
+    将合并后的字典校验为 SimulationRequest。
+    返回 (请求对象或 None, 校验错误字段说明列表)。
+    """
+    errors: List[str] = []
+    try:
+        req = SimulationRequest.model_validate(merged)
+        return req, []
+    except ValidationError as e:
+        for err in e.errors():
+            loc = ".".join(str(x) for x in err.get("loc", ()))
+            errors.append(f"{loc}: {err.get('msg', '')}")
+        return None, errors
+    except Exception as e:
+        errors.append(str(e))
+        return None, errors
+
 
 # ============ 启动配置 ============
 

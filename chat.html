@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能体仿真 · 体验区</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css@5.5.1/github-markdown.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/highlight.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #4169e1;
+            --primary-gradient: linear-gradient(135deg, #4169e1 0%, #1e90ff 100%);
+            --bg-color: #f8f9fb;
+            --panel-bg: #ffffff;
+            --text-main: #1a1d21;
+            --text-muted: #64748b;
+            --border-color: #e2e8f0;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        header {
+            height: 64px;
+            background: #fff;
+            border-bottom: 1px solid var(--border-color);
+            box-shadow: var(--shadow-sm);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 2rem;
+            z-index: 100;
+            flex-shrink: 0;
+            position: sticky;
+            top: 0;
+            width: 100%;
+        }
+
+        .nav-main {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            height: 64px;
+        }
+
+        .nav-item {
+            height: 64px;
+            display: flex;
+            align-items: center;
+            padding: 0 0.5rem;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.95rem;
+            font-weight: 600;
+            position: relative;
+            transition: color 0.2s;
+            white-space: nowrap;
+        }
+
+        .nav-item:hover {
+            color: var(--primary-color);
+        }
+
+        .nav-item.active {
+            color: var(--primary-color);
+        }
+
+        .nav-item.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--primary-color);
+            border-radius: 3px 3px 0 0;
+        }
+
+        .logo-container { display: flex; align-items: center; gap: 0.75rem; flex-shrink: 0; margin-right: 1rem; }
+        .logo-container strong { font-size: 1.1rem; font-weight: 700; color: #1e293b; display: none; }
+
+        .logo-img {
+            height: 36px;
+            object-fit: contain;
+        }
+
+        .layout {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 360px 1fr;
+            min-height: 0;
+            width: 100%;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        @media (max-width: 1024px) {
+            .layout { grid-template-columns: 300px 1fr; }
+        }
+
+        /* Sidebar / Form Area */
+        .sidebar {
+            background: var(--panel-bg);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .sidebar-header {
+            padding: 1.25rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .sidebar-header h2 { font-size: 1rem; font-weight: 600; margin-bottom: 0.25rem; }
+        .sidebar-header p { font-size: 0.75rem; color: var(--text-muted); line-height: 1.4; }
+
+        .form-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .form-section-title {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.025em;
+            margin-top: 0.5rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .form-group { display: flex; flex-direction: column; gap: 0.35rem; }
+        .form-group label { font-size: 0.85rem; font-weight: 500; color: #334155; display: flex; justify-content: space-between; }
+        .form-group label .unit { font-weight: normal; color: var(--text-muted); font-size: 0.75rem; }
+        
+        .form-group input, .form-group select, .form-group textarea {
+            padding: 0.6rem 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 0.9rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            background: #fdfdfd;
+        }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(65, 105, 225, 0.1);
+        }
+
+        .gas-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+        }
+
+        details.gas-details {
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0.5rem;
+        }
+        details.gas-details summary {
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            padding: 0.25rem;
+            color: var(--primary-color);
+        }
+
+        /* Main Chat Area */
+        .chat-area {
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            background: #f8f9fb;
+            position: relative;
+        }
+
+        #chat-log {
+            flex: 1;
+            overflow-y: auto;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            scroll-behavior: smooth;
+        }
+
+        .message {
+            max-width: 85%;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.user {
+            align-self: flex-end;
+            align-items: flex-end;
+        }
+
+        .message.assistant {
+            align-self: flex-start;
+            align-items: flex-start;
+        }
+
+        .message-content {
+            padding: 0.85rem 1.1rem;
+            border-radius: 12px;
+            font-size: 0.92rem;
+            line-height: 1.6;
+            position: relative;
+            box-shadow: var(--shadow-sm);
+            transition: all 0.2s ease;
+        }
+
+        .user .message-content {
+            background: var(--primary-gradient);
+            color: white;
+            border-bottom-right-radius: 2px;
+        }
+
+        .assistant .message-content {
+            background: white;
+            color: var(--text-main);
+            border-bottom-left-radius: 2px;
+            border: 1px solid var(--border-color);
+            width: 100%;
+        }
+
+        .message-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 0.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+
+        .assistant .message-label::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            background: var(--primary-color);
+            border-radius: 50%;
+        }
+
+        /* 增强图片渲染 */
+        .markdown-body img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 1rem 0;
+            border-radius: 10px;
+            box-shadow: var(--shadow-md);
+            cursor: zoom-in;
+            transition: transform 0.2s;
+            background: #fff;
+            border: 1px solid var(--border-color);
+        }
+        .markdown-body img:hover { transform: scale(1.005); }
+
+        /* 文件下载卡片样式 */
+        .download-card {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            background: #f8fafc;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            text-decoration: none !important;
+            color: var(--text-main) !important;
+            margin: 0.75rem 0;
+            transition: all 0.2s;
+        }
+        .download-card:hover {
+            background: #ffffff;
+            border-color: var(--primary-color);
+            box-shadow: var(--shadow-md);
+            transform: translateY(-1px);
+        }
+        .file-icon {
+            width: 40px;
+            height: 40px;
+            background: #eff6ff;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+            color: var(--primary-color);
+            flex-shrink: 0;
+        }
+        .file-info {
+            display: flex;
+            flex-direction: column;
+        }
+        .file-name { font-weight: 600; font-size: 0.9rem; }
+        .file-action { font-size: 0.75rem; color: var(--text-muted); }
+
+        /* Markdown Styles */
+        .markdown-body { font-size: 0.95rem; }
+        .markdown-body p { margin-bottom: 0.75rem; }
+        .markdown-body p:last-child { margin-bottom: 0; }
+        .markdown-body h1, .markdown-body h2, .markdown-body h3 { margin: 1rem 0 0.5rem; line-height: 1.3; }
+        .markdown-body ul, .markdown-body ol { margin-bottom: 0.75rem; padding-left: 1.5rem; }
+        .markdown-body code { background: #f1f5f9; padding: 0.2rem 0.4rem; border-radius: 4px; font-family: monospace; font-size: 0.85em; }
+        .markdown-body pre { background: #1e293b; color: #f8fafc; padding: 1rem; border-radius: 8px; overflow-x: auto; margin: 0.75rem 0; }
+        .markdown-body pre code { background: transparent; padding: 0; color: inherit; font-size: 0.85rem; }
+        .markdown-body table { border-collapse: collapse; width: 100%; margin: 0.75rem 0; font-size: 0.85rem; }
+        .markdown-body th, .markdown-body td { border: 1px solid var(--border-color); padding: 0.5rem 0.75rem; text-align: left; }
+        .markdown-body th { background: #f8fafc; font-weight: 600; }
+        .markdown-body blockquote { border-left: 4px solid var(--border-color); padding-left: 1rem; color: var(--text-muted); font-style: italic; }
+
+        /* Status indicator */
+        .status-indicator {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            background: #f1f5f9;
+            padding: 0.4rem 0.75rem;
+            border-radius: 20px;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin: 0.5rem 0;
+            align-self: center;
+        }
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            background: var(--primary-color);
+            border-radius: 50%;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(0.95); opacity: 0.5; }
+            50% { transform: scale(1.1); opacity: 1; }
+            100% { transform: scale(0.95); opacity: 0.5; }
+        }
+
+        /* Input Bar */
+        .input-container {
+            padding: 1.25rem 2rem;
+            background: white;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .input-wrapper {
+            display: flex;
+            gap: 0.75rem;
+            align-items: flex-end;
+            background: #f8fafc;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 0.5rem 0.75rem;
+            transition: all 0.2s ease;
+        }
+        .input-wrapper:focus-within {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(65, 105, 225, 0.1);
+            background: #fff;
+        }
+
+        #user-input {
+            flex: 1;
+            border: none;
+            background: transparent;
+            padding: 0.5rem;
+            font-size: 0.95rem;
+            font-family: inherit;
+            resize: none;
+            max-height: 120px;
+            min-height: 24px;
+            outline: none;
+            line-height: 1.5;
+        }
+
+        #send-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            border: none;
+            background: var(--primary-gradient);
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+            margin-bottom: 2px;
+        }
+        #send-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+        #send-btn:active { transform: translateY(0); }
+        #send-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        #send-btn svg { width: 18px; height: 18px; fill: currentColor; }
+
+        /* Empty State */
+        .empty-state {
+            position: absolute;
+            top: 45%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            width: 100%;
+            padding: 2rem;
+            pointer-events: none;
+        }
+        .empty-state-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+        .empty-state h1 { font-size: 1.5rem; font-weight: 700; color: #334155; margin-bottom: 0.5rem; }
+        .empty-state p { color: var(--text-muted); font-size: 0.95rem; }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="nav-main">
+            <div class="logo-container">
+                <img src="static/logo.png" alt="ASPEN 仿真计算平台" class="logo-img">
+            </div>
+            <a href="/" class="nav-item">传统仿真模式</a>
+            <a href="/chat" class="nav-item active">智能体模式</a>
+        </div>
+        <div class="header-right" style="font-size: 0.85rem; color: var(--text-muted); font-weight: 500;">
+            智能体仿真 · 体验区
+        </div>
+    </header>
+
+    <div class="layout">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>工况参数</h2>
+                <p>参数将随对话自动注入系统上下文，模型始终基于最新表单进行分析与仿真。</p>
+            </div>
+            <div class="form-container">
+                <form id="paramForm" autocomplete="off" onsubmit="return false;">
+                    <div class="form-section-title">核心工况</div>
+                    <div class="form-group">
+                        <label>气体流量 <span class="unit">scmh</span></label>
+                        <input type="number" step="any" id="f_gas_flow_rate" placeholder="10000">
+                    </div>
+                    <div class="form-group">
+                        <label>入口压力 <span class="unit">MPaA</span></label>
+                        <input type="number" step="any" id="f_inlet_pressure" placeholder="0.5">
+                    </div>
+                    <div class="form-group">
+                        <label>入口温度 <span class="unit">℃</span></label>
+                        <input type="number" step="any" id="f_inlet_temperature" placeholder="25">
+                    </div>
+                    <div class="form-group">
+                        <label>出口压力 <span class="unit">MPaA</span></label>
+                        <input type="number" step="any" id="f_outlet_pressure" placeholder="3.0">
+                    </div>
+                    <div class="form-group">
+                        <label>等熵效率 <span class="unit">%</span></label>
+                        <input type="number" step="any" id="f_efficiency" placeholder="80">
+                    </div>
+
+                    <div class="form-section-title">其它信息</div>
+                    <div class="form-group">
+                        <label>用户名称</label>
+                        <input type="text" id="f_user_name" placeholder="Jack">
+                    </div>
+                    <div class="form-group">
+                        <label>其它要求</label>
+                        <textarea id="f_other_requirements" rows="2" placeholder="例如：标准工况下的气体处理..."></textarea>
+                    </div>
+
+                    <div class="form-section-title">组分百分比</div>
+                    <details class="gas-details" open>
+                        <summary>查看/编辑组分</summary>
+                        <div class="gas-grid" id="gasGrid"></div>
+                    </details>
+                </form>
+                
+                <div style="margin-top: auto; padding-top: 1rem;">
+                    <button id="toggle-json" style="background:none; border:none; color:var(--text-muted); font-size:0.7rem; cursor:pointer; text-decoration:underline;">
+                        查看提交的 JSON 数据
+                    </button>
+                    <pre id="json-preview" style="display:none; font-size:0.65rem; background:#1e293b; color:#cbd5e1; padding:0.75rem; border-radius:8px; margin-top:0.5rem; max-height:150px; overflow:auto;"></pre>
+                </div>
+            </div>
+        </aside>
+
+        <main class="chat-area">
+            <div id="empty-state" class="empty-state">
+                <div class="empty-state-icon">✨</div>
+                <h1>有什么我能帮你的吗？</h1>
+                <p>您可以询问工艺概念、分析当前工况，或直接要求「开始仿真」。</p>
+            </div>
+
+            <div id="chat-log"></div>
+
+            <div class="input-container">
+                <div class="input-wrapper">
+                    <textarea id="user-input" placeholder="输入消息，Shift + Enter 换行..." rows="1"></textarea>
+                    <button id="send-btn" title="发送消息">
+                        <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 7z"></path></svg>
+                    </button>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span class="meta" style="font-size: 0.7rem; color: var(--text-muted);">
+                        基于 OpenAI Agents SDK · 自动同步左侧工况
+                    </span>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // 初始化 markdown-it
+        const md = window.markdownit({
+            html: true,
+            linkify: true,
+            typographer: true,
+            highlight: function (str, lang) {
+                if (lang && hljs.getLanguage(lang)) {
+                    try {
+                        return hljs.highlight(str, { language: lang }).value;
+                    } catch (__) {}
+                }
+                return ''; // 使用默认转义
+            }
+        });
+
+        // 自定义渲染规则：处理图片
+        const defaultImageRender = md.renderer.rules.image || function(tokens, idx, options, env, self) {
+            return self.renderToken(tokens, idx, options);
+        };
+        md.renderer.rules.image = function (tokens, idx, options, env, self) {
+            const token = tokens[idx];
+            let src = token.attrGet('src') || '';
+            src = src.replace(/^sandbox:/, '').trim();
+            if (!src.startsWith('http') && !src.startsWith('/')) {
+                src = '/' + src;
+            }
+            token.attrSet('src', src);
+            token.attrSet('onclick', `window.open('${src}', '_blank')`);
+            token.attrSet('onerror', "this.style.display='none'");
+            return defaultImageRender(tokens, idx, options, env, self);
+        };
+
+        // 自定义渲染规则：处理链接（文件下载卡片）
+        const defaultLinkOpenRender = md.renderer.rules.link_open || function(tokens, idx, options, env, self) {
+            return self.renderToken(tokens, idx, options);
+        };
+        md.renderer.rules.link_open = function (tokens, idx, options, env, self) {
+            const token = tokens[idx];
+            let href = token.attrGet('href') || '';
+            href = href.replace(/^sandbox:/, '').trim();
+            if (!href.startsWith('http') && !href.startsWith('/')) {
+                href = '/' + href;
+            }
+            token.attrSet('href', href);
+            token.attrSet('target', '_blank');
+
+            const isFile = /\.(docx|pdf|xlsx|pptx|zip)$/i.test(href);
+            if (isFile) {
+                token.attrSet('class', 'download-card');
+                // 找到链接文本
+                let text = '下载文件';
+                if (tokens[idx + 1] && tokens[idx + 1].type === 'text') {
+                    text = tokens[idx + 1].content;
+                }
+                return `
+                    <a href="${href}" class="download-card" target="_blank">
+                        <div class="file-icon">📄</div>
+                        <div class="file-info">
+                            <span class="file-name">${text}</span>
+                            <span class="file-action">点击下载技术文档</span>
+                        </div>
+                `;
+            }
+            return defaultLinkOpenRender(tokens, idx, options, env, self);
+        };
+
+        (function () {
+            const log = document.getElementById('chat-log');
+            const inp = document.getElementById('user-input');
+            const btn = document.getElementById('send-btn');
+            const emptyState = document.getElementById('empty-state');
+            const jsonPreview = document.getElementById('json-preview');
+            const toggleJson = document.getElementById('toggle-json');
+            
+            const GAS_KEYS = ['CH4','C2H6','C3H8','C4H10','N2','CO2','H2S','O2','H2','H2O','HE','C2H2','C2H4'];
+            const GAS_LABEL = { CH4:'甲烷', C2H6:'乙烷', C3H8:'丙烷', C4H10:'丁烷', N2:'氮', CO2:'CO₂', H2S:'H₂S', O2:'氧', H2:'氢', H2O:'水', HE:'氦', C2H2:'乙炔', C2H4:'乙烯' };
+
+            // 初始化气体组分网格
+            const grid = document.getElementById('gasGrid');
+            GAS_KEYS.forEach(k => {
+                const wrap = document.createElement('div');
+                wrap.className = 'form-group';
+                wrap.innerHTML = `<label>${GAS_LABEL[k] || k} <span class="unit">%</span></label>
+                                 <input type="number" step="any" id="f_gc_${k}" placeholder="0">`;
+                grid.appendChild(wrap);
+            });
+
+            let history = [];
+
+            // 自动调整 textarea 高度
+            inp.addEventListener('input', function() {
+                this.style.height = 'auto';
+                this.style.height = (this.scrollHeight) + 'px';
+            });
+
+            function numOrNull(id) {
+                const el = document.getElementById(id);
+                if (!el) return null;
+                const v = el.value.trim();
+                if (v === '') return null;
+                const n = Number(v);
+                return isNaN(n) ? null : n;
+            }
+
+            function collectParams() {
+                const gc = {};
+                GAS_KEYS.forEach(k => {
+                    const v = numOrNull('f_gc_' + k);
+                    gc[k] = v !== null ? v : 0;
+                });
+                return {
+                    gas_flow_rate: numOrNull('f_gas_flow_rate'),
+                    inlet_pressure: numOrNull('f_inlet_pressure'),
+                    inlet_temperature: numOrNull('f_inlet_temperature'),
+                    outlet_pressure: numOrNull('f_outlet_pressure'),
+                    efficiency: numOrNull('f_efficiency'),
+                    gas_composition: gc,
+                    other_requirements: document.getElementById('f_other_requirements').value.trim(),
+                    user_name: document.getElementById('f_user_name').value.trim() || null
+                };
+            }
+
+            function fillForm(d) {
+                if (!d) return;
+                const setVal = (id, v) => {
+                    const el = document.getElementById(id);
+                    if (el) el.value = (v === null || v === undefined) ? '' : v;
+                };
+                setVal('f_gas_flow_rate', d.gas_flow_rate);
+                setVal('f_inlet_pressure', d.inlet_pressure);
+                setVal('f_inlet_temperature', d.inlet_temperature);
+                setVal('f_outlet_pressure', d.outlet_pressure);
+                setVal('f_efficiency', d.efficiency);
+                setVal('f_user_name', d.user_name);
+                setVal('f_other_requirements', d.other_requirements);
+                const g = d.gas_composition || {};
+                GAS_KEYS.forEach(k => setVal('f_gc_' + k, g[k]));
+                updateJsonPreview();
+            }
+
+            function updateJsonPreview() {
+                jsonPreview.textContent = JSON.stringify(collectParams(), null, 2);
+            }
+
+            document.getElementById('paramForm').addEventListener('input', updateJsonPreview);
+            toggleJson.onclick = () => {
+                const isHidden = jsonPreview.style.display === 'none';
+                jsonPreview.style.display = isHidden ? 'block' : 'none';
+                toggleJson.textContent = isHidden ? '隐藏 JSON 数据' : '查看提交的 JSON 数据';
+            };
+
+            function appendMessage(role, content = '') {
+                emptyState.classList.add('hidden');
+                const msgDiv = document.createElement('div');
+                msgDiv.className = `message ${role}`;
+                
+                const label = document.createElement('div');
+                label.className = 'message-label';
+                label.textContent = role === 'user' ? '您' : '智能助手';
+                
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'message-content markdown-body';
+                
+                if (role === 'assistant') {
+                    contentDiv.innerHTML = content ? md.render(content) : '<span style="color:var(--text-muted)">正在思考...</span>';
+                } else {
+                    contentDiv.textContent = content;
+                }
+                
+                msgDiv.appendChild(label);
+                msgDiv.appendChild(contentDiv);
+                log.appendChild(msgDiv);
+                log.scrollTop = log.scrollHeight;
+                return contentDiv;
+            }
+
+            function appendStatus(text) {
+                const status = document.createElement('div');
+                status.className = 'status-indicator';
+                status.innerHTML = `<div class="status-dot"></div><span>${text}</span>`;
+                log.appendChild(status);
+                log.scrollTop = log.scrollHeight;
+                return status;
+            }
+
+            async function send() {
+                const text = inp.value.trim();
+                if (!text || btn.disabled) return;
+
+                inp.value = '';
+                inp.style.height = 'auto';
+                btn.disabled = true;
+
+                appendMessage('user', text);
+                history.push({ role: 'user', content: text });
+
+                const assistantContentDiv = appendMessage('assistant');
+                let fullAssistantText = '';
+                let currentStatus = null;
+
+                try {
+                    const res = await fetch('/api/chat/stream', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            messages: history,
+                            partial_params: collectParams()
+                        })
+                    });
+
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+                    const reader = res.body.getReader();
+                    const decoder = new TextDecoder();
+                    let buffer = '';
+
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        
+                        buffer += decoder.decode(value, { stream: true });
+                        
+                        // 更加鲁棒的 SSE 解析
+                        let boundary;
+                        while ((boundary = buffer.indexOf('\n\n')) >= 0) {
+                            const block = buffer.slice(0, boundary);
+                            buffer = buffer.slice(boundary + 2);
+                            
+                            const lines = block.split('\n');
+                            for (const line of lines) {
+                                if (!line.startsWith('data: ')) continue;
+                                const dataStr = line.slice(6).trim();
+                                if (dataStr === '[DONE]') break;
+
+                                try {
+                                    const ev = JSON.parse(dataStr);
+                                    if (ev.type === 'delta' && ev.text) {
+                                        if (currentStatus) { currentStatus.remove(); currentStatus = null; }
+                                        fullAssistantText += ev.text;
+                                        
+                                        // 预处理残缺的 Markdown 图片语法：![...](/path
+                                        let processedText = fullAssistantText;
+                                        
+                                        // 更加强力的流式补全：如果检测到 ![...]( 且没有闭合 )
+                                        const openImgIndex = processedText.lastIndexOf('![');
+                                        if (openImgIndex !== -1) {
+                                            const sub = processedText.substring(openImgIndex);
+                                            if (sub.includes('](') && !sub.includes(')')) {
+                                                processedText += ')';
+                                            }
+                                        }
+                                        
+                                        // 链接同理
+                                        const openLinkIndex = processedText.lastIndexOf('[');
+                                        if (openLinkIndex !== -1 && processedText[openLinkIndex-1] !== '!') {
+                                            const sub = processedText.substring(openLinkIndex);
+                                            if (sub.includes('](') && !sub.includes(')')) {
+                                                processedText += ')';
+                                            }
+                                        }
+                                        
+                                        assistantContentDiv.innerHTML = md.render(processedText);
+                                        log.scrollTop = log.scrollHeight;
+                                    } else if (ev.type === 'status') {
+                                        if (currentStatus) currentStatus.remove();
+                                        currentStatus = appendStatus(ev.message);
+                                    } else if (ev.type === 'error') {
+                                        assistantContentDiv.innerHTML += `<div style="color:#ef4444; margin-top:0.5rem;">[错误] ${ev.message}</div>`;
+                                    }
+                                } catch(e) { console.warn("Parse error", e, dataStr); }
+                            }
+                        }
+                    }
+                    
+                    if (currentStatus) currentStatus.remove();
+                    history.push({ role: 'assistant', content: fullAssistantText });
+                    
+                } catch (e) {
+                    if (currentStatus) currentStatus.remove();
+                    assistantContentDiv.innerHTML = `<div style="color:#ef4444;">[异常] ${e.message}</div>`;
+                } finally {
+                    btn.disabled = false;
+                }
+            }
+
+            btn.onclick = send;
+            inp.onkeydown = e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    send();
+                }
+            };
+
+            // 初始加载默认参数
+            fetch('/api/chat/default-params')
+                .then(r => r.ok ? r.json() : Promise.reject())
+                .then(fillForm)
+                .catch(() => fillForm({
+                    gas_flow_rate: 10000, inlet_pressure: 0.5, inlet_temperature: 25,
+                    outlet_pressure: 3.0, efficiency: 80, user_name: null,
+                    gas_composition: { CH4: 100 }, other_requirements: '标准工况'
+                }));
+        })();
+    </script>
+</body>
+</html>

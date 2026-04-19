@@ -11,6 +11,13 @@ import subprocess
 import argparse
 from pathlib import Path
 
+try:
+    from auto_aspen import is_aspen_mock_mode
+except ImportError:
+    def is_aspen_mock_mode():
+        v = os.getenv("AUTO_ASPEN_MOCK", "")
+        return bool(v.strip()) and v.strip().lower() in ("1", "true", "yes", "on")
+
 def create_logs_directory():
     """创建日志目录"""
     logs_dir = Path("logs")
@@ -45,6 +52,7 @@ def start_api_server(host: str = "0.0.0.0", port: int = 8000, reload: bool = Tru
         print(f"   Host: {host}")
         print(f"   Port: {port}")
         print(f"   Reload: {reload}")
+        print(f"   Aspen模拟模式 (AUTO_ASPEN_MOCK): {'开启' if is_aspen_mock_mode() else '关闭'}")
         print(f"   APWZ文件: {apwz_file_path}")
         print(f"   API文档: http://{host}:{port}/docs")
         print(f"   健康检查: http://{host}:{port}/health")
