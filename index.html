@@ -801,7 +801,7 @@
                                 气体流量 <span class="unit-info">(Nm³/day, 24 Nm³/day = 1 scmh)</span>
                             </label>
                             <input type="number" id="gasFlowRate" name="gas_flow_rate" class="form-input" 
-                                   value="" step="1000" required>
+                                   value="1200000" step="1000" required>
                         </div>
 
                         <div class="form-group">
@@ -842,7 +842,7 @@
                                 入口压力 <span class="unit-info">(MPaA)</span>
                             </label>
                             <input type="number" id="inletPressure" name="inlet_pressure" class="form-input" 
-                                   value="" step="0.01" min="0" required>
+                                   value="13.5" step="0.01" min="0" required>
                         </div>
 
                         <div class="form-group">
@@ -850,7 +850,7 @@
                                 出口压力 <span class="unit-info">(MPaA)</span>
                             </label>
                             <input type="number" id="outletPressure" name="outlet_pressure" class="form-input" 
-                                   value="" step="0.01" min="0" required>
+                                   value="6.0" step="0.01" min="0" required>
                         </div>
 
                         <div class="form-group">
@@ -858,7 +858,7 @@
                                 入口温度 <span class="unit-info">(°C)</span>
                             </label>
                             <input type="number" id="inletTemperature" name="inlet_temperature" class="form-input" 
-                                   value="" step="0.1" required>
+                                   value="25.0" step="0.1" required>
                         </div>
                     </div>
                 </div>
@@ -884,7 +884,7 @@
                             <div class="form-group">
                                 <label class="form-label" for="ch4">CH₄ (甲烷)</label>
                                 <input type="number" id="ch4" name="CH4" class="form-input" 
-                                       value="0" min="0" max="100" step="0.1" required>
+                                       value="100" min="0" max="100" step="0.1" required>
                             </div>
 
                             <div class="form-group">
@@ -1057,6 +1057,17 @@
                         机组选型结果
                     </h3>
                     <div id="unitSelectionGrid" class="result-grid">
+                        <!-- 动态生成 -->
+                    </div>
+                </div>
+
+                <!-- 透平一维设计指标 (新增独立卡片) -->
+                <div id="teMetricsCard" class="result-card" style="display: none;">
+                    <h3 class="card-title">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                        透平一维设计指标
+                    </h3>
+                    <div id="teMetricsGrid" class="result-grid">
                         <!-- 动态生成 -->
                     </div>
                 </div>
@@ -1567,6 +1578,25 @@
             const unitParams = data['机组参数'] || {};
             const techParams = data['技术参数'] || {};
             const powerDistribution = data['功率分配'] || {};
+            const teMetrics = data['透平一维设计指标'] || {};
+
+            // 处理透平一维设计指标 (独立显示)
+            const teCard = document.getElementById('teMetricsCard');
+            const teGrid = document.getElementById('teMetricsGrid');
+            if (Object.keys(teMetrics).length > 0) {
+                teCard.style.display = 'block';
+                teGrid.innerHTML = '';
+                Object.entries(teMetrics).forEach(([key, value]) => {
+                    teGrid.innerHTML += `
+                        <div class="result-item" style="border-left: 4px solid #9c27b0;">
+                            <div class="result-label">${key}</div>
+                            <div class="result-value" style="color: #9c27b0; font-weight: 700;">${value}</div>
+                        </div>
+                    `;
+                });
+            } else {
+                teCard.style.display = 'none';
+            }
 
             // 设计类型（突出显示）
             if (data['设计类型']) {

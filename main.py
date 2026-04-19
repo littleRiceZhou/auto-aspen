@@ -28,8 +28,10 @@ from auto_aspen.power_calculations import (
     PowerCalculations, MainEngineParams, UtilityParams, 
     EconomicParams, UnitSelectionParams
 )
+from auto_aspen.turbine_calc import TurbineExpander1D
 from auto_aspen import SimulationParameters, APWZSimulator, is_aspen_mock_mode
 from auto_aspen.docx_pdf import generate_document, get_auto_aspen_parameter_mapping
+from auto_aspen.pptx_tool import generate_pptx_document
 from auto_aspen.chat_stream import ChatStreamRequest, stream_chat_sse
 
 # 创建FastAPI应用
@@ -110,7 +112,8 @@ class SimulationResponse(BaseModel):
     power_results: Optional[Dict[str, Any]] = Field(None, description="功率计算结果")
     combined_results: Optional[Dict[str, Any]] = Field(None, description="综合结果")
     diagram_url: Optional[str] = Field(None, description="机组布局图URL")
-    document_urls: Optional[Dict[str, str]] = Field(None, description="文档下载地址")
+    document_urls: Optional[Dict[str, Optional[str]]] = Field(None, description="文档下载地址")
+    pptx_url: Optional[str] = Field(None, description="PPT文档下载地址")
     error_message: Optional[str] = Field(None, description="错误信息")
 
 
@@ -429,7 +432,7 @@ async def run_aspen_simulation_internal(request: SimulationRequest) -> Dict[str,
             "error_message": f"ASPEN仿真内部错误: {str(e)}"
         }
 
-async def run_power_calculation_internal(main_power: float, aspen_results: Dict[str, Any]) -> Dict[str, Any]:
+async def run_power_calculation_internal(main_power: float, aspen_results: Dict[str, Any], request: SimulationRequest) -> Dict[str, Any]:
     """内部功率计算函数"""
     try:
         # 创建计算器实例
@@ -522,7 +525,37 @@ async def run_power_calculation_internal(main_power: float, aspen_results: Dict[
                 "回报周期(年)": f"{payback_period:.1f}"
             }
         }
-        
+
+        # 注入透平膨胀机一维计算指标
+        try:
+            # 确定工质
+            fluid = 'CH4'
+            comp = request.gas_composition
+            if comp.H2 > 50: fluid = 'H2'
+            elif comp.C2H6 > 20: fluid = 'C2H6'
+            elif comp.N2 > 50: fluid = 'N2'
+            elif comp.CO2 > 20: fluid = 'CO2'
+            
+            te_calc = TurbineExpander1D()
+            # mv 单位转换: scmh -> Nm3/s (1 scmh = 1/3600 Nm3/s)
+            te_res = te_calc.calculate(
+                p0=request.inlet_pressure * 1e6, 
+                T0=request.inlet_temperature + 273.15, 
+                p3=request.outlet_pressure * 1e6, 
+                mv=request.gas_flow_rate, # 内部会自动除以 3600
+                fluid=fluid
+            )
+            selection_output["选型输出"]["透平一维设计指标"] = {
+                "叶轮直径(m)": f"{te_res['impeller_diameter_m']:.4f}",
+                "设计转速(rpm)": f"{te_res['speed_rpm']:.0f}",
+                "喷嘴马赫数": f"{te_res['nozzle_mach']:.3f}",
+                "设计效率": f"{te_res['efficiency']:.4f}",
+                "设计评价": te_res['status_message']
+            }
+            logger.info(f"成功集成透平一维计算指标: {te_res['status_message']}")
+        except Exception as te_e:
+            logger.error(f"透平一维计算集成失败: {str(te_e)}")
+    
         # 如果是双级设计，添加功率分配信息
         if is_dual_level:
             # 验证：总净发电功率 = 一级功率 + 二级功率
@@ -684,6 +717,9 @@ def generate_technical_document(aspen_results: Dict[str, Any], power_results: Di
         design_type = power_selection.get("设计类型", "单级发电机组")
         is_dual_level = "双级" in design_type
         
+        # 提取透平一维设计指标
+        te_metrics = power_selection.get("透平一维设计指标", {})
+        
         # 根据设计类型设置级数
         levels = "2" if is_dual_level else "1"
         
@@ -705,6 +741,13 @@ def generate_technical_document(aspen_results: Dict[str, Any], power_results: Di
             "auto_aspen_7": unit_model,                   # 机组型号
             "auto_aspen_8": levels,                       # 级数（根据设计类型动态设置）
             "auto_aspen_9": str(exhaust_temp),            # 机组排气温度 (℃)
+            
+            # 透平一维设计指标 (扩展参数)
+            "auto_aspen_30": te_metrics.get("叶轮直径(m)", "N/A"),
+            "auto_aspen_31": te_metrics.get("设计转速(rpm)", "N/A"),
+            "auto_aspen_32": te_metrics.get("喷嘴马赫数", "N/A"),
+            "auto_aspen_33": te_metrics.get("设计效率", "N/A"),
+            "auto_aspen_34": te_metrics.get("设计评价", "N/A"),
             
             # 机组占地面积与操作重量
             "auto_aspen_10": f"{unit_model}-EX",          # 机组型号
@@ -806,6 +849,7 @@ def generate_technical_document(aspen_results: Dict[str, Any], power_results: Di
                 "success": True,
                 "document_urls": document_urls,
                 "parameters_count": len(parameters),
+                "parameters": parameters,  # 返回构造好的参数，供 PPT 使用
                 "text_to_image_replaced": text_to_image_count,
                 "generated_files": {
                     "docx_path": result["docx_path"],
@@ -1000,7 +1044,7 @@ async def execute_comprehensive_simulation(request: SimulationRequest) -> Simula
             logger.info(f"使用估算的主机功率: {main_power} kW")
 
         logger.info(f"Step 2: 运行功率计算，主机功率: {main_power} kW")
-        power_results = await run_power_calculation_internal(main_power, aspen_results)
+        power_results = await run_power_calculation_internal(main_power, aspen_results, request)
 
         if not power_results["success"]:
             return SimulationResponse(
@@ -1031,14 +1075,48 @@ async def execute_comprehensive_simulation(request: SimulationRequest) -> Simula
 
         document_result = generate_technical_document(aspen_results, power_results, request, diagram_file_path)
         document_urls = None
+        pptx_params = {}
         if document_result["success"]:
             document_urls = document_result["document_urls"]
+            pptx_params = document_result.get("parameters", {})
             logger.info(f"技术文档已生成: {document_urls}")
         else:
             logger.warning(f"技术文档生成失败: {document_result.get('error')}")
 
+        logger.info("Step 4.5: 生成 PPT 文档")
+        pptx_url = None
+        
+        # 获取当前时间戳用于文件名
+        current_timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # 准备图片替换参数 (从 generate_technical_document 的逻辑中复用)
+        pptx_text_to_images = None
+        if diagram_file_path and os.path.exists(diagram_file_path):
+            pptx_text_to_images = {
+                "auto_aspen_image_1": {
+                    "image_path": diagram_file_path,
+                    "width": 6.0,
+                    "height": 4.0
+                }
+            }
+
+        # 使用与 docx 相同的参数进行 PPT 替换
+        pptx_result = generate_pptx_document(
+            parameters=pptx_params, 
+            text_to_images=pptx_text_to_images, # 传入图片替换参数
+            output_name=f"production_report_{current_timestamp}"
+        )
+        if pptx_result["success"]:
+            pptx_url = f"/static/re/{os.path.basename(pptx_result['pptx_path'])}"
+            logger.info(f"PPT 文档已生成: {pptx_url}")
+        else:
+            logger.warning(f"PPT 文档生成失败: {pptx_result.get('error')}")
+
         logger.info("Step 5: 合并仿真结果")
         combined_results = create_combined_results(aspen_results, power_results, request, document_urls)
+        # 将 PPT URL 也放入综合结果中
+        if combined_results and isinstance(combined_results, dict) and "文档下载" in combined_results:
+            combined_results["文档下载"]["pptx"] = pptx_url
 
         logger.info(f"✅ 综合仿真计算成功完成，耗时: {simulation_duration:.2f}秒")
 
@@ -1048,7 +1126,8 @@ async def execute_comprehensive_simulation(request: SimulationRequest) -> Simula
             power_results=power_results,
             combined_results=combined_results,
             diagram_url=diagram_url,
-            document_urls=document_urls
+            document_urls=document_urls,
+            pptx_url=pptx_url
         )
 
     except Exception as e:

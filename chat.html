@@ -596,17 +596,38 @@
             const isFile = /\.(docx|pdf|xlsx|pptx|zip)$/i.test(href);
             if (isFile) {
                 token.attrSet('class', 'download-card');
+                
+                // 根据文件类型设置图标和描述
+                let icon = '📄';
+                let actionText = '点击下载文件';
+                let fileType = '文件';
+                
+                if (/\.docx$/i.test(href)) {
+                    icon = '📝';
+                    fileType = 'Word 文档';
+                    actionText = '点击下载技术报告 (DOCX)';
+                } else if (/\.pptx$/i.test(href)) {
+                    icon = '📊';
+                    fileType = 'PPT 演示文稿';
+                    actionText = '点击下载生产报告 (PPTX)';
+                } else if (/\.pdf$/i.test(href)) {
+                    icon = '📕';
+                    fileType = 'PDF 文档';
+                    actionText = '点击下载 PDF 报告';
+                }
+                
                 // 找到链接文本
-                let text = '下载文件';
+                let text = fileType;
                 if (tokens[idx + 1] && tokens[idx + 1].type === 'text') {
                     text = tokens[idx + 1].content;
                 }
+                
                 return `
                     <a href="${href}" class="download-card" target="_blank">
-                        <div class="file-icon">📄</div>
+                        <div class="file-icon">${icon}</div>
                         <div class="file-info">
                             <span class="file-name">${text}</span>
-                            <span class="file-action">点击下载技术文档</span>
+                            <span class="file-action">${actionText}</span>
                         </div>
                 `;
             }
@@ -845,8 +866,8 @@
                 .then(r => r.ok ? r.json() : Promise.reject())
                 .then(fillForm)
                 .catch(() => fillForm({
-                    gas_flow_rate: 10000, inlet_pressure: 0.5, inlet_temperature: 25,
-                    outlet_pressure: 3.0, efficiency: 80, user_name: null,
+                    gas_flow_rate: 50000, inlet_pressure: 13.5, inlet_temperature: 25,
+                    outlet_pressure: 6.0, efficiency: 85, user_name: null,
                     gas_composition: { CH4: 100 }, other_requirements: '标准工况'
                 }));
         })();

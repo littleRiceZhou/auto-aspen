@@ -766,11 +766,11 @@ class PyASPENPlus(object):
 class SimulationParameters:
     """仿真参数管理类"""
     
-    gas_flow_rate: float = 10000.0  # scmh
-    inlet_pressure: float = 0.5     # MPaA
+    gas_flow_rate: float = 50000.0  # scmh
+    inlet_pressure: float = 13.5     # MPaA
     inlet_temperature: float = 25.0 # °C
-    outlet_pressure: float = 3.0    # MPaA
-    efficiency: float = 80.0        # %
+    outlet_pressure: float = 6.0    # MPaA
+    efficiency: float = 85.0        # %
     gas_composition: Dict[str, float] = field(default_factory=lambda: {
         'CH4': 0.0,     # 甲烷
         'C2H6': 0.0,    # 乙烷
