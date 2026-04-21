@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException, Body
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Literal
 import traceback
 import os
 import getpass
@@ -102,7 +102,11 @@ class SimulationRequest(BaseModel):
         description="用户名称（可选）"
     )
 
-    
+    # 机组方案：压差发电机组或 EC 机组（影响 PPT 模板与示意图文案）
+    unit_scheme: Literal["pressure_difference", "ec"] = Field(
+        default="pressure_difference",
+        description="pressure_difference=压差发电机组，ec=EC机组",
+    )
 
 
 class SimulationResponse(BaseModel):
@@ -160,6 +164,7 @@ async def chat_default_params():
         "gas_composition": gc,
         "other_requirements": d.get("other_requirements", ""),
         "user_name": None,
+        "unit_scheme": "pressure_difference",
     }
 
 
@@ -220,6 +225,47 @@ def get_user_name(request_user_name: str = None) -> str:
     except Exception as e:
         logger.warning(f"获取用户名称失败: {str(e)}，使用默认值")
         return "系统用户"
+
+
+def _fluid_for_turbine_expander(request: SimulationRequest) -> str:
+    """与透平一维计算、机组选型中一致的工质选择逻辑。"""
+    comp = request.gas_composition
+    if comp.H2 > 50:
+        return "H2"
+    if comp.C2H6 > 20:
+        return "C2H6"
+    if comp.N2 > 50:
+        return "N2"
+    if comp.CO2 > 20:
+        return "CO2"
+    return "CH4"
+
+
+def _te_isentropic_efficiency_percent(request: SimulationRequest) -> Optional[float]:
+    """
+    透平一维设计得到的设计效率（0~1）转为 Aspen 等熵效率输入（%）。
+    成功则用于仿真前覆盖请求中的 efficiency，使 Aspen 与一维指标一致。
+    """
+    try:
+        fluid = _fluid_for_turbine_expander(request)
+        te_calc = TurbineExpander1D()
+        te_res = te_calc.calculate(
+            p0=request.inlet_pressure * 1e6,
+            T0=request.inlet_temperature + 273.15,
+            p3=request.outlet_pressure * 1e6,
+            mv=request.gas_flow_rate,
+            fluid=fluid,
+        )
+        eta = float(te_res["efficiency"])
+        if 0 < eta <= 1.0:
+            pct = eta * 100.0
+            logger.info(f"透平一维设计效率联动 Aspen 等熵效率: {eta:.4f} -> {pct:.4f}%")
+            return pct
+        logger.warning(f"透平一维效率异常 ({eta})，保留请求中的效率")
+    except Exception as e:
+        logger.warning(f"透平一维效率预计算失败，使用请求中的效率: {e}")
+    return None
+
 
 async def run_aspen_simulation_internal(request: SimulationRequest) -> Dict[str, Any]:
     """内部ASPEN仿真函数"""
@@ -528,14 +574,7 @@ async def run_power_calculation_internal(main_power: float, aspen_results: Dict[
 
         # 注入透平膨胀机一维计算指标
         try:
-            # 确定工质
-            fluid = 'CH4'
-            comp = request.gas_composition
-            if comp.H2 > 50: fluid = 'H2'
-            elif comp.C2H6 > 20: fluid = 'C2H6'
-            elif comp.N2 > 50: fluid = 'N2'
-            elif comp.CO2 > 20: fluid = 'CO2'
-            
+            fluid = _fluid_for_turbine_expander(request)
             te_calc = TurbineExpander1D()
             # mv 单位转换: scmh -> Nm3/s (1 scmh = 1/3600 Nm3/s)
             te_res = te_calc.calculate(
@@ -773,17 +812,18 @@ def generate_technical_document(aspen_results: Dict[str, Any], power_results: Di
             "auto_aspen_24": nitrogen_flow,               # 氮气-干气密封气体流量 (Nm³/h)
             "auto_aspen_25": compressed_air_demand,       # 压缩空气-气动阀气体流量 (Nm³/h)
             
-            # 用户信息
+            # 用户信息（勿复用 auto_aspen_27，见上：27=进站 MPaG）
             "auto_aspen_26": get_user_name(request.user_name),             # 用户名称
-            "auto_aspen_27": get_user_name(request.user_name),             # 用户名称
             
             # 时间参数
             "auto_aspen_time": datetime.datetime.now().strftime("%m/%d/%Y"),  # 当前时间（自动获取）
+            # 模板中示意图标题「流程图」替换为「机组示意图」
+            "流程图": "机组示意图",
         }
         
         # 生成时间戳文件名
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]  # 毫秒精度
-        output_name = f"technical_report_{timestamp}"
+        output_name = f"技术方案_{timestamp}"
         
         # 输出公用工程参数用于调试
         logger.info(f"公用工程参数配置（来源：UtilityParams）:")
@@ -797,15 +837,14 @@ def generate_technical_document(aspen_results: Dict[str, Any], power_results: Di
         logger.info(f"  氮气流量: {nitrogen_flow} Nm³/h （UtilityParams.air_demand_nm3_per_h）")
         logger.info(f"  空气需求量: {compressed_air_demand} Nm³/h （UtilityParams.air_demand_nm3）")
         
-        # 准备机组布局图替换
+        # 准备机组布局图替换（兼容模板中的 auto_aspen_image_1 / [流程图] / [机组示意图]）
         text_to_images = None
         if diagram_file_path and os.path.exists(diagram_file_path):
+            _img = {"image_path": diagram_file_path, "width": 6.0, "height": 4.0}
             text_to_images = {
-                "auto_aspen_image_1": {
-                    "image_path": diagram_file_path,
-                    "width": 6.0,
-                    "height": 4.0
-                }
+                "auto_aspen_image_1": _img,
+                "[流程图]": _img,
+                "[机组示意图]": _img,
             }
             logger.info(f"准备将机组布局图插入文档: {diagram_file_path}")
         else:
@@ -870,7 +909,7 @@ def generate_technical_document(aspen_results: Dict[str, Any], power_results: Di
         }
 
 
-def generate_diagram_file(power_results: Dict[str, Any]) -> Dict[str, Any]:
+def generate_diagram_file(power_results: Dict[str, Any], request: Optional[SimulationRequest] = None) -> Dict[str, Any]:
     """
     生成机组布局图并保存为文件
     """
@@ -898,10 +937,16 @@ def generate_diagram_file(power_results: Dict[str, Any]) -> Dict[str, Any]:
         logger.info(f"🔍 调试信息 - power_distribution 字段: {list(power_distribution.keys()) if power_distribution else '空'}")
         logger.info(f"🔍 调试信息 - selection_output 字段: {list(selection_output.keys()) if selection_output else '空'}")
         
+        scheme = "pressure_difference"
+        if request is not None and getattr(request, "unit_scheme", None) == "ec":
+            scheme = "ec"
+
         try:
             # 方式1: 从功率分配中获取（双级设计）
-            if power_distribution and "总净发电功率" in power_distribution:
-                net_power_str = power_distribution.get("总净发电功率", "0")
+            if power_distribution and (
+                "总净发电功率(kW)" in power_distribution or "总净发电功率" in power_distribution
+            ):
+                net_power_str = power_distribution.get("总净发电功率(kW)") or power_distribution.get("总净发电功率", "0")
                 net_power = float(str(net_power_str).replace("kW", "").strip())
                 logger.info(f"✅ 从功率分配获取净发电功率: {net_power} kW")
             
@@ -935,8 +980,13 @@ def generate_diagram_file(power_results: Dict[str, Any]) -> Dict[str, Any]:
         # 根据设计类型生成图像
         width_pixels = int(unit_dimensions[0] * 100)  # 长度×100
         height_pixels = int(unit_dimensions[1] * 100)  # 宽度×100
-        logger.info(f"生成机组布局图 - 净发电功率: {int(net_power)} kW, 尺寸: {width_pixels}x{height_pixels}")
-        img = draw(outer_size=(width_pixels, height_pixels), net_power=int(net_power), fill_canvas=True)
+        logger.info(f"生成机组布局图 - 净发电功率: {int(net_power)} kW, 尺寸: {width_pixels}x{height_pixels}, scheme={scheme}")
+        img = draw(
+            outer_size=(width_pixels, height_pixels),
+            net_power=int(round(net_power)),
+            fill_canvas=True,
+            scheme=scheme,
+        )
         # 生成时间戳文件名
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]  # 毫秒精度
         filename = f"diagram_{timestamp}.png"
@@ -966,6 +1016,21 @@ def generate_diagram_file(power_results: Dict[str, Any]) -> Dict[str, Any]:
         }
 
 
+def _resolve_pptx_template_path(unit_scheme: str) -> tuple[str, str]:
+    """
+    按机组方案解析 PPT 模板绝对/相对路径。
+    返回 (模板路径, 日志标签)。path 为空表示所需模板不存在。
+    EC 机组优先 models/EC.pptx，其次 models/ec-template.pptx。
+    """
+    if unit_scheme != "ec":
+        p = "models/production-template.pptx"
+        return (p if os.path.exists(p) else "", "压差")
+    for path in ("models/EC.pptx", "models/ec-template.pptx"):
+        if os.path.exists(path):
+            return (path, f"EC({path})")
+    return ("", "EC(未找到模板)")
+
+
 def create_combined_results(aspen_results: Dict[str, Any], power_results: Dict[str, Any], request: SimulationRequest, document_urls: Dict[str, str] = None) -> Dict[str, Any]:
     """创建综合结果"""
     try:
@@ -988,6 +1053,7 @@ def create_combined_results(aspen_results: Dict[str, Any], power_results: Dict[s
                 "入口温度": f"{request.inlet_temperature} °C",
                 "出口压力": f"{request.outlet_pressure} MPaA",
                 "设计效率": f"{request.efficiency} %",
+                "机组方案": "EC机组" if getattr(request, "unit_scheme", "pressure_difference") == "ec" else "压差发电机组",
                 "气体组成": request.gas_composition.dict()
             },
             "ASPEN仿真结果": {
@@ -1018,6 +1084,11 @@ async def execute_comprehensive_simulation(request: SimulationRequest) -> Simula
 
     try:
         logger.info("开始综合仿真计算")
+
+        # 透平一维设计效率 -> Aspen 等熵效率（%），在仿真前写入请求
+        te_eff_pct = _te_isentropic_efficiency_percent(request)
+        if te_eff_pct is not None:
+            request = request.model_copy(update={"efficiency": te_eff_pct})
 
         logger.info("Step 1: 运行ASPEN仿真")
         aspen_results = await run_aspen_simulation_internal(request)
@@ -1060,7 +1131,7 @@ async def execute_comprehensive_simulation(request: SimulationRequest) -> Simula
             aspen_results["simulation_results"]["simulation_time"] = f"{simulation_duration:.2f}秒"
 
         logger.info("Step 3: 生成机组布局图")
-        diagram_result = generate_diagram_file(power_results)
+        diagram_result = generate_diagram_file(power_results, request)
         diagram_url = None
         if diagram_result["success"]:
             diagram_url = diagram_result["diagram_url"]
@@ -1089,26 +1160,42 @@ async def execute_comprehensive_simulation(request: SimulationRequest) -> Simula
         # 获取当前时间戳用于文件名
         current_timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         
-        # 准备图片替换参数 (从 generate_technical_document 的逻辑中复用)
+        # 准备图片替换参数（与 docx 一致，兼容多种占位符）
         pptx_text_to_images = None
         if diagram_file_path and os.path.exists(diagram_file_path):
+            _pimg = {"image_path": diagram_file_path, "width": 6.0, "height": 4.0}
             pptx_text_to_images = {
-                "auto_aspen_image_1": {
-                    "image_path": diagram_file_path,
-                    "width": 6.0,
-                    "height": 4.0
-                }
+                "auto_aspen_image_1": _pimg,
+                "[流程图]": _pimg,
+                "[机组示意图]": _pimg,
             }
 
-        # 使用与 docx 相同的参数进行 PPT 替换
-        pptx_result = generate_pptx_document(
-            parameters=pptx_params, 
-            text_to_images=pptx_text_to_images, # 传入图片替换参数
-            output_name=f"production_report_{current_timestamp}"
-        )
+        scheme = getattr(request, "unit_scheme", "pressure_difference")
+        is_ec = scheme == "ec"
+        ppt_template, ppt_tpl_tag = _resolve_pptx_template_path(scheme)
+        ppt_out_name = f"EC交流PPT_{current_timestamp}" if is_ec else f"交流PPT_{current_timestamp}"
+
+        if is_ec and not ppt_template:
+            logger.error(
+                "EC 机组已选，但未找到 EC PPT 模板；请将模板置于 models/EC.pptx 或 models/ec-template.pptx"
+            )
+            pptx_result = {
+                "success": False,
+                "error": "EC 机组 PPT 模板未找到（需要 models/EC.pptx 或 models/ec-template.pptx）",
+            }
+        elif not is_ec and not ppt_template:
+            pptx_result = {"success": False, "error": "压差机组 PPT 模板不存在: models/production-template.pptx"}
+        else:
+            logger.info(f"PPT 使用模板: {ppt_tpl_tag} -> {ppt_template}")
+            pptx_result = generate_pptx_document(
+                parameters=pptx_params,
+                text_to_images=pptx_text_to_images,
+                output_name=ppt_out_name,
+                template_path=ppt_template,
+            )
         if pptx_result["success"]:
             pptx_url = f"/static/re/{os.path.basename(pptx_result['pptx_path'])}"
-            logger.info(f"PPT 文档已生成: {pptx_url}")
+            logger.info(f"PPT 文档已生成: {pptx_url} ({ppt_tpl_tag})")
         else:
             logger.warning(f"PPT 文档生成失败: {pptx_result.get('error')}")
 

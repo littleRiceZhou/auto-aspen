@@ -819,6 +819,14 @@
                             <input type="text" id="userName" name="user_name" class="form-input" 
                                    value="" placeholder="">
                         </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="unitScheme">机组方案</label>
+                            <select id="unitScheme" name="unit_scheme" class="form-input">
+                                <option value="pressure_difference" selected>压差发电机组</option>
+                                <option value="ec">EC 机组</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -1092,7 +1100,7 @@
                     <div id="documentDownloadContent" class="download-container">
                         <div class="empty-state">
                             <h3>等待生成技术文档</h3>
-                            <p>系统将根据仿真结果自动生成技术报告文档</p>
+                            <p>系统将根据仿真结果自动生成技术方案（Word）与交流 PPT</p>
                         </div>
                     </div>
                 </div>
@@ -1229,6 +1237,9 @@
             if (userName && userName.trim()) {
                 data.user_name = userName.trim();
             }
+
+            const unitSchemeEl = document.getElementById('unitScheme');
+            data.unit_scheme = unitSchemeEl ? unitSchemeEl.value : 'pressure_difference';
             
             // 收集压力温度参数
             const inletPressure = parseFloat(document.getElementById('inletPressure').value);
@@ -1751,19 +1762,25 @@
             }
             
             // 检查是否有文档下载地址
-            if (result.document_urls && Object.keys(result.document_urls).length > 0) {
+            const docUrls = { ...(result.document_urls || {}) };
+            if (result.pptx_url) {
+                docUrls.pptx = result.pptx_url;
+            }
+            if (Object.keys(docUrls).length > 0) {
                 const selectionOutput = result.combined_results?.['机组选型结果']?.['选型输出'] || {};
                 const designType = selectionOutput['设计类型'] || '单级发电机组';
                 const netPower = selectionOutput['净发电功率(kW)'] || 'N/A';
+                const unitSchemeLabel = result.combined_results?.['输入参数']?.['机组方案'];
+                const pptxFileLabel = unitSchemeLabel === 'EC机组' ? 'EC交流PPT.pptx' : '交流PPT.pptx';
+                const labelByFormat = { docx: '技术方案.docx', pdf: '技术方案.pdf', pptx: pptxFileLabel };
                 
                 let downloadButtons = '';
-                Object.entries(result.document_urls).forEach(([format, url]) => {
-                    const formatUpper = format.toUpperCase();
-                    const icon = '';
-                    
+                Object.entries(docUrls).forEach(([format, url]) => {
+                    if (!url) return;
+                    const label = labelByFormat[format] || `${format.toUpperCase()} 文档`;
                     downloadButtons += `
                         <a href="${url}" class="download-btn" download target="_blank">
-                            <span>下载 ${formatUpper} 文档</span>
+                            <span>下载 ${label}</span>
                         </a>
                     `;
                 });
@@ -1778,7 +1795,7 @@
                             <p><strong>设计类型：</strong>${designType}</p>
                             <p><strong>净发电功率：</strong>${netPower}</p>
                             <p><strong>文档内容：</strong>包含完整的仿真结果、机组选型参数、公用工程配置和经济性分析</p>
-                            <p><small>提示：点击下载按钮可获取包含所有计算参数的详细技术报告</small></p>
+                            <p><small>提示：Word 为技术方案，PowerPoint 为交流用 PPT</small></p>
                         </div>
                     </div>
                 `;

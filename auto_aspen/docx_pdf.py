@@ -11,6 +11,7 @@ os.makedirs(file_dir, exist_ok=True)
 # 特殊变量字体大小配置
 special_font_size = {
     "auto_aspen_26": 16,
+    "auto_aspen_8": 8,
     # "auto_aspen_time": 14,
     # "auto_aspen_7": 12,
     # "auto_aspen_5": 18,
@@ -56,6 +57,8 @@ def get_auto_aspen_parameter_mapping():
         "auto_aspen_2": "13.5",       # 进站压力 (MPaA)
         "auto_aspen_3": "25",         # 平均进气温度 (℃)
         "auto_aspen_4": "6.0",        # 出站压力 (MPaA)
+        "auto_aspen_27": "135",       # 进站压力 (MPaG)，与 MPaA×10 同量级，供模板占位
+        "auto_aspen_28": "60",       # 出站压力 (MPaG)
         
         # 段落中的参数
         "auto_aspen_5": "654",        # 净发电功率 (kW)
@@ -788,26 +791,18 @@ def sort_auto_aspen_keys_reverse(replacements):
     # 1. 首先按长度倒序（长key优先）
     # 2. 长度相同时按字典序倒序（后面的key先替换，适应跨run替换）
     auto_aspen_keys.sort(key=lambda x: (-len(x), x), reverse=True)
-    
-    print(f"🔍 跨run适配排序结果: {auto_aspen_keys[:10]}...")  # 显示前10个用于调试
-    
-    # 详细的排序测试示例
-    if len(auto_aspen_keys) > 0:
-        print(f"🧪 排序逻辑验证:")
-        print(f"   策略：长度优先 → 字典序倒序")
-        
-        # 按长度分组显示
-        length_groups = {}
-        for key in auto_aspen_keys[:8]:  # 只显示前8个
-            length = len(key)
-            if length not in length_groups:
-                length_groups[length] = []
-            length_groups[length].append(key)
-        
-        for length in sorted(length_groups.keys(), reverse=True):
-            keys_in_group = length_groups[length]
-            print(f"   长度{length}: {keys_in_group}")
-    
+
+    # 默认不刷屏；需要调试占位符替换时设置 AUTO_ASPEN_DEBUG_REPLACEMENTS=1
+    if os.getenv("AUTO_ASPEN_DEBUG_REPLACEMENTS", "").strip() in ("1", "true", "yes"):
+        print(f"🔍 跨run适配排序结果: {auto_aspen_keys[:10]}...")
+        if len(auto_aspen_keys) > 0:
+            print("🧪 排序逻辑验证: 长度优先 → 字典序倒序")
+            length_groups = {}
+            for key in auto_aspen_keys[:8]:
+                length_groups.setdefault(len(key), []).append(key)
+            for length in sorted(length_groups.keys(), reverse=True):
+                print(f"   长度{length}: {length_groups[length]}")
+
     # 返回排序后的完整键列表
     return auto_aspen_keys + other_keys
 
@@ -1253,8 +1248,8 @@ def create_text_to_image_mapping():
             "width": 5.0,
             "height": 3.0
         },
-        "[流程图]": {
-            "image_path": "models/demo.png", 
+        "[机组示意图]": {
+            "image_path": "models/demo.png",
             "width": 6.0,
             "height": 4.0
         },

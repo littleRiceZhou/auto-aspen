@@ -16,7 +16,8 @@ from agents import function_tool
     description_override=(
         "执行 ASPEN + 机组功率 + 技术文档的**综合仿真**（与 HTTP POST /api/simulation 等价）。"
         "当用户明确要求「跑仿真 / 算一下 / 出结果」且气量、进/出口压力、入口温度等必填参数已齐时调用；"
-        "数值应优先与系统消息中的 partial_params（左侧表单）一致。返回 JSON 字符串摘要（成功时含概况与图表/文档链接）。"
+        "数值应优先与系统消息中的 partial_params（左侧表单）一致；EC 机组时传 unit_scheme=\"ec\" 以生成 EC 专用 PPT。"
+        "返回 JSON 字符串摘要（成功时含概况与图表/文档链接）。"
     ),
 )
 async def run_aspen_comprehensive_simulation(
@@ -27,14 +28,16 @@ async def run_aspen_comprehensive_simulation(
     efficiency: float = 85.0,
     gas_composition: Optional[Dict[str, float]] = None,
     user_name: Optional[str] = None,
+    unit_scheme: str = "pressure_difference",
 ) -> str:
-    """运行综合仿真并返回简要结果 JSON 字符串。"""
+    """运行综合仿真并返回简要结果 JSON 字符串。unit_scheme 为 ec 时使用 EC 机组专用 PPT 模板。"""
     # 延迟导入，避免与 main 的循环依赖（main 会加载 chat_stream）
     from main import GasComposition, SimulationRequest, execute_comprehensive_simulation
 
     gc_raw = gas_composition if isinstance(gas_composition, dict) else {}
     merged = {k: float(gc_raw.get(k, 0) or 0) for k in GasComposition.model_fields}
     gas = GasComposition(**merged)
+    scheme = unit_scheme if unit_scheme in ("pressure_difference", "ec") else "pressure_difference"
     req = SimulationRequest(
         gas_flow_rate=float(gas_flow_rate),
         inlet_pressure=float(inlet_pressure),
@@ -43,6 +46,7 @@ async def run_aspen_comprehensive_simulation(
         efficiency=float(efficiency),
         gas_composition=gas,
         user_name=user_name,
+        unit_scheme=scheme,
     )
     resp = await execute_comprehensive_simulation(req)
     dumped: Dict[str, Any] = resp.model_dump()

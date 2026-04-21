@@ -1,16 +1,27 @@
 from PIL import Image, ImageDraw, ImageFont
 import os
 
-def draw_one_level(outer_size=(550, 300), net_power=654, fill_canvas=True):
+
+def _dual_level_split_kw(net_power):
+    """总净功率四舍五入为整数后拆成两级 kW，两级之和等于总整数。"""
+    total = int(round(float(net_power)))
+    p1 = total // 2
+    p2 = total - p1
+    return total, p1, p2
+
+
+def draw_one_level(outer_size=(550, 300), net_power=654, fill_canvas=True, scheme="pressure_difference"):
     """
-    绘制天然气压差发电机组示意图
+    绘制天然气压差 / EC 发电机组示意图
     
     参数:
     outer_size: 外层矩形尺寸 (width, height) 单位像素，对应实际5.5m x 3m
-    net_power: 净发电功率数值 (kW)
+    net_power: 净发电功率数值 (kW)，显示为整数
     fill_canvas: 是否铺满整个画布 (True: 完全铺满, False: 留边距)
+    scheme: pressure_difference=压差机组，ec=EC机组
     """
     outer_size = list(outer_size)
+    net_kw = int(round(float(net_power)))
     
     # 从像素尺寸计算实际尺寸（除以100）
     actual_width = outer_size[0] / 100
@@ -86,7 +97,8 @@ def draw_one_level(outer_size=(550, 300), net_power=654, fill_canvas=True):
         (turbine_x, turbine_y + 40)       # 左下
     ]
     draw.polygon(turbine_points, outline='black', fill='lightblue', width=2)
-    draw.text((turbine_x - 20, turbine_y - 70), "压差发电", fill='black', font=font_medium)
+    turbine_kind = "EC膨胀" if scheme == "ec" else "压差发电"
+    draw.text((turbine_x - 20, turbine_y - 70), turbine_kind, fill='black', font=font_medium)
     draw.text((turbine_x - 50, turbine_y - 10), "透平", fill='black', font=font_medium)
     
     # 齿轮箱 (中间矩形)
@@ -150,12 +162,12 @@ def draw_one_level(outer_size=(550, 300), net_power=654, fill_canvas=True):
                    belt2_end_x, belt2_y + belt_gap//2 + belt_width], 
                   fill='gray', outline='black', width=1)
     
-    # 净发电功率标注
-    power_text = f"净发电功率：{net_power}kW"
+    # 净发电功率标注（整数 kW）
+    power_text = f"净发电功率：{net_kw}kW"
     draw.text((motor_x - 20, motor_y + motor_radius + 20), power_text, fill='red', font=font_medium)
     
     # 标题
-    title = "天然气压差发电机组"
+    title = "天然气EC发电机组" if scheme == "ec" else "天然气压差发电机组"
     title_x = rect_x + rect_width//2 - 80
     title_y = rect_y + rect_height + 30
     draw.text((title_x, title_y), title, fill='black', font=font_large)
@@ -163,25 +175,24 @@ def draw_one_level(outer_size=(550, 300), net_power=654, fill_canvas=True):
     return img
 
 
-def draw_two_level(outer_size=(450, 350), net_power=486, one_power=None, fill_canvas=True):
+def draw_two_level(outer_size=(450, 350), net_power=486, fill_canvas=True, scheme="pressure_difference"):
     """
-    绘制双级天然气压差发电机组示意图
+    绘制双级天然气压差 / EC 发电机组示意图
     
     参数:
     outer_size: 外层矩形尺寸 (width, height) 单位像素
-    net_power: 总净发电功率数值 (kW)
-    one_power: 1#透平净发电功率 (kW)，如果不提供则自动设置为总功率的一半
+    net_power: 总净发电功率数值 (kW)，一二级功率为整数拆分
     fill_canvas: 是否铺满整个画布 (True: 铺满, False: 留边距)
+    scheme: pressure_difference=压差机组，ec=EC机组
     """
     outer_size = list(outer_size)
     # 从像素尺寸计算实际尺寸（除以100）
     actual_width = outer_size[0] / 100
     actual_height = outer_size[1] / 100
-    
-    # 一级二级功率都等于总功率的一半
-    if one_power is None:
-        one_power = net_power / 2
-    two_power = net_power / 2  # 2#透平功率
+
+    total_kw, one_kw, two_kw = _dual_level_split_kw(net_power)
+    one_power = one_kw
+    two_power = two_kw
     
     # 创建图像，白色背景 - 根据内容自适应大小
     if fill_canvas:
@@ -348,17 +359,20 @@ def draw_two_level(outer_size=(450, 350), net_power=486, one_power=None, fill_ca
                    belt3_end_x, belt3_y + belt_gap//2 + belt_width], 
                   fill='blue', outline='black', width=1)
     
-    # 总净发电功率标注
-    total_power_text = f"总净发电功率：{net_power}kW"
+    # 总净发电功率标注（整数 kW）
+    total_power_text = f"总净发电功率：{total_kw}kW"
     draw.text((rect_x + 20, rect_y + rect_height - 30), total_power_text, fill='red', font=font_medium)
+
+    title = "天然气EC发电机组" if scheme == "ec" else "天然气压差发电机组"
+    draw.text((rect_x + rect_width // 2 - 90, rect_y + rect_height + 25), title, fill='black', font=font_large)
     
     return img
 
-def draw(outer_size=(550, 300), net_power=654, fill_canvas=True):
-    if net_power > 1000:
-        return draw_two_level(outer_size, net_power=net_power, fill_canvas=fill_canvas)
-    else:
-        return draw_one_level(outer_size, net_power=net_power, fill_canvas=fill_canvas)
+def draw(outer_size=(550, 300), net_power=654, fill_canvas=True, scheme="pressure_difference"):
+    np = int(round(float(net_power)))
+    if np > 1000:
+        return draw_two_level(outer_size, net_power=np, fill_canvas=fill_canvas, scheme=scheme)
+    return draw_one_level(outer_size, net_power=np, fill_canvas=fill_canvas, scheme=scheme)
 
 def main():
     """示例用法"""

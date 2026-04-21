@@ -1,7 +1,10 @@
 import os
-from pptx import Presentation
 from pathlib import Path
 import re
+from typing import Optional
+
+from pptx import Presentation
+from pptx.util import Pt
 
 # 导入现有的配置
 try:
@@ -14,43 +17,75 @@ except ImportError:
     def sort_auto_aspen_keys_reverse(replacements):
         return sorted(replacements.keys(), key=len, reverse=True)
 
-def replace_text_in_shape(shape, replacements):
+
+def _apply_replacements_to_text(full_text: str, sorted_keys: list, replacements: dict) -> str:
     """
-    在 PPT 形状中替换文本
+    在整段字符串上应用替换，与 docx 中 auto_aspen 边界规则一致。
+    长键优先（由 sort_auto_aspen_keys_reverse 保证）。
+    """
+    out = full_text
+    for old_text in sorted_keys:
+        if old_text not in out:
+            continue
+        new_text = str(replacements[old_text])
+        if old_text.startswith("auto_aspen_"):
+            escaped = re.escape(old_text)
+            pattern = escaped + r"(?=\D|$)"
+            out = re.sub(pattern, new_text, out)
+        else:
+            out = out.replace(old_text, new_text)
+    return out
+
+
+def _set_paragraph_font_size_pt(paragraph, size_pt: float) -> None:
+    """将段落内所有 run 设为指定字号（磅）。"""
+    if paragraph is None or size_pt is None or size_pt <= 0:
+        return
+    try:
+        size = Pt(float(size_pt))
+    except (TypeError, ValueError):
+        return
+    for run in paragraph.runs:
+        run.font.size = size
+
+
+def replace_text_in_shape(shape, replacements, font_size_pt: Optional[float] = 12.0):
+    """
+    在 PPT 形状中替换文本。
+
+    PowerPoint 常把占位符拆成多个 run（例如 auto_aspen_2 | 0），按 run 替换会失败；
+    必须在段落级别读取合并后的文本再写回（与 Word 跨 run 逻辑一致）。
     """
     replaced_count = 0
-    
-    # 获取文本框对象
+
     text_frame = None
-    if hasattr(shape, 'has_text_frame') and shape.has_text_frame:
+    if hasattr(shape, "has_text_frame") and shape.has_text_frame:
         text_frame = shape.text_frame
-    elif hasattr(shape, 'text_frame'): # 处理表格单元格等直接拥有 text_frame 的对象
+    elif hasattr(shape, "text_frame"):
         text_frame = shape.text_frame
-    
+
     if not text_frame:
         return 0
-    
-    # 排序键以避免子字符串冲突
+
     sorted_keys = sort_auto_aspen_keys_reverse(replacements)
-    
+
     for paragraph in text_frame.paragraphs:
-        for run in paragraph.runs:
-            for old_text in sorted_keys:
-                if old_text in run.text:
-                    new_text = str(replacements[old_text])
-                    # 精确匹配检查（类似于 docx 中的逻辑）
-                    if old_text.startswith('auto_aspen_'):
-                        escaped_text = re.escape(old_text)
-                        pattern = escaped_text + r'(?=\D|$)'
-                        if re.search(pattern, run.text):
-                            run.text = run.text.replace(old_text, new_text)
-                            replaced_count += 1
-                    else:
-                        run.text = run.text.replace(old_text, new_text)
-                        replaced_count += 1
+        full = paragraph.text
+        new_full = _apply_replacements_to_text(full, sorted_keys, replacements)
+        if new_full != full:
+            paragraph.text = new_full
+            _set_paragraph_font_size_pt(paragraph, font_size_pt)
+            replaced_count += 1
+
     return replaced_count
 
-def replace_text_in_pptx(pptx_path, replacements, output_pptx_path=None, image_replacements=None):
+def replace_text_in_pptx(
+    pptx_path,
+    replacements,
+    output_pptx_path=None,
+    image_replacements=None,
+    font_size_pt: Optional[float] = 12.0,
+):
     """
     读取 pptx 文件，替换指定文本和图片并保存
     """
@@ -93,18 +128,18 @@ def replace_text_in_pptx(pptx_path, replacements, output_pptx_path=None, image_r
                                 continue # 形状已被删除，跳过后续处理
 
             # 处理普通文本形状
-            total_replaced += replace_text_in_shape(shape, replacements)
+            total_replaced += replace_text_in_shape(shape, replacements, font_size_pt)
             
             # 处理表格
             if shape.has_table:
                 for row in shape.table.rows:
                     for cell in row.cells:
-                        total_replaced += replace_text_in_shape(cell, replacements)
+                        total_replaced += replace_text_in_shape(cell, replacements, font_size_pt)
             
             # 处理组合形状
             if shape.shape_type == 6:  # Group shape
                 for sub_shape in shape.shapes:
-                    total_replaced += replace_text_in_shape(sub_shape, replacements)
+                    total_replaced += replace_text_in_shape(sub_shape, replacements, font_size_pt)
 
     # 确定输出路径
     if output_pptx_path is None:
@@ -117,12 +152,22 @@ def replace_text_in_pptx(pptx_path, replacements, output_pptx_path=None, image_r
     
     return output_pptx_path
 
-def generate_pptx_document(parameters=None, text_to_images=None, output_name=None):
+def generate_pptx_document(
+    parameters=None,
+    text_to_images=None,
+    output_name=None,
+    template_path=None,
+    font_size_pt: Optional[float] = 14.0,
+):
     """
-    封装的 PPT 生成函数，供外部调用
+    封装的 PPT 生成函数，供外部调用。
+
+    template_path: 可选，默认 models/production-template.pptx；EC 方案可用 models/ec-template.pptx。
+    font_size_pt: 替换占位符后的正文字号（磅），默认 12，与 Word 技术方案一致；传 None 则不强制字号。
     """
-    template_path = "models/production-template.pptx"
-    
+    if template_path is None:
+        template_path = "models/production-template.pptx"
+
     if not os.path.exists(template_path):
         return {
             "success": False,
@@ -138,19 +183,27 @@ def generate_pptx_document(parameters=None, text_to_images=None, output_name=Non
         output_name = "production_report_generated"
     
     output_pptx_path = f"{file_dir}/{output_name}.pptx"
-    
+
+    env_pt = os.getenv("AUTO_ASPEN_PPT_FONT_PT", "").strip()
+    if env_pt:
+        try:
+            font_size_pt = float(env_pt)
+        except ValueError:
+            pass
+
     try:
         final_path = replace_text_in_pptx(
-            template_path, 
-            replacements, 
-            output_pptx_path, 
-            image_replacements=text_to_images
+            template_path,
+            replacements,
+            output_pptx_path,
+            image_replacements=text_to_images,
+            font_size_pt=None,
         )
         return {
             "success": True,
             "pptx_path": final_path,
             "parameters_replaced": len(replacements),
-            "images_replaced": 1 if text_to_images else 0 # 简化统计
+            "images_replaced": 1 if text_to_images else 0,
         }
     except Exception as e:
         return {

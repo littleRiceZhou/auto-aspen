@@ -494,6 +494,13 @@
                         <label>等熵效率 <span class="unit">%</span></label>
                         <input type="number" step="any" id="f_efficiency" placeholder="80">
                     </div>
+                    <div class="form-group">
+                        <label>机组方案</label>
+                        <select id="f_unit_scheme">
+                            <option value="pressure_difference">压差发电机组</option>
+                            <option value="ec">EC 机组</option>
+                        </select>
+                    </div>
 
                     <div class="form-section-title">其它信息</div>
                     <div class="form-group">
@@ -605,11 +612,11 @@
                 if (/\.docx$/i.test(href)) {
                     icon = '📝';
                     fileType = 'Word 文档';
-                    actionText = '点击下载技术报告 (DOCX)';
+                    actionText = '点击下载技术方案 (DOCX)';
                 } else if (/\.pptx$/i.test(href)) {
                     icon = '📊';
                     fileType = 'PPT 演示文稿';
-                    actionText = '点击下载生产报告 (PPTX)';
+                    actionText = '点击下载交流 PPT (PPTX)';
                 } else if (/\.pdf$/i.test(href)) {
                     icon = '📕';
                     fileType = 'PDF 文档';
@@ -678,6 +685,7 @@
                     const v = numOrNull('f_gc_' + k);
                     gc[k] = v !== null ? v : 0;
                 });
+                const usEl = document.getElementById('f_unit_scheme');
                 return {
                     gas_flow_rate: numOrNull('f_gas_flow_rate'),
                     inlet_pressure: numOrNull('f_inlet_pressure'),
@@ -686,7 +694,8 @@
                     efficiency: numOrNull('f_efficiency'),
                     gas_composition: gc,
                     other_requirements: document.getElementById('f_other_requirements').value.trim(),
-                    user_name: document.getElementById('f_user_name').value.trim() || null
+                    user_name: document.getElementById('f_user_name').value.trim() || null,
+                    unit_scheme: usEl ? usEl.value : 'pressure_difference',
                 };
             }
 
@@ -701,6 +710,8 @@
                 setVal('f_inlet_temperature', d.inlet_temperature);
                 setVal('f_outlet_pressure', d.outlet_pressure);
                 setVal('f_efficiency', d.efficiency);
+                const us = document.getElementById('f_unit_scheme');
+                if (us && d.unit_scheme) us.value = d.unit_scheme;
                 setVal('f_user_name', d.user_name);
                 setVal('f_other_requirements', d.other_requirements);
                 const g = d.gas_composition || {};
@@ -713,6 +724,7 @@
             }
 
             document.getElementById('paramForm').addEventListener('input', updateJsonPreview);
+            document.getElementById('paramForm').addEventListener('change', updateJsonPreview);
             toggleJson.onclick = () => {
                 const isHidden = jsonPreview.style.display === 'none';
                 jsonPreview.style.display = isHidden ? 'block' : 'none';
