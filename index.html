@@ -1069,6 +1069,17 @@
                     </div>
                 </div>
 
+                <!-- 公用功耗（与功率计算模型一致） -->
+                <div class="result-card">
+                    <h3 class="card-title">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                        公用功耗
+                    </h3>
+                    <div id="utilityPowerGrid" class="result-grid">
+                        <!-- 动态生成 -->
+                    </div>
+                </div>
+
                 <!-- 透平一维设计指标 (新增独立卡片) -->
                 <div id="teMetricsCard" class="result-card" style="display: none;">
                     <h3 class="card-title">
@@ -1438,6 +1449,10 @@
             const selectionOutput = selectionResults['选型输出'] || {};
             displayUnitSelection(selectionOutput);
 
+            // 显示公用功耗
+            const utilityPower = combined['公用功耗'] || {};
+            displayUtilityPower(utilityPower);
+
             // 显示经济性分析
             const economicResults = combined['经济性分析'] || {};
             displayEconomicAnalysis(economicResults);
@@ -1722,6 +1737,49 @@
                         </div>
                     `;
                 }
+            });
+        }
+
+        function displayUtilityPower(data) {
+            const grid = document.getElementById('utilityPowerGrid');
+            if (!grid) return;
+            grid.innerHTML = '';
+
+            if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
+                grid.innerHTML = `
+                    <div class="result-item">
+                        <div class="result-label">数据</div>
+                        <div class="result-value" style="color: #888; font-style: italic;">暂无公用功耗数据（请先完成仿真）</div>
+                    </div>
+                `;
+                return;
+            }
+
+            Object.entries(data).forEach(([key, value]) => {
+                let itemStyle = '';
+                let valueStyle = 'color: #000000;';
+
+                if (key.includes('净发电')) {
+                    itemStyle = 'border-left: 4px solid #00aa44;';
+                    valueStyle = 'color: #00aa44; font-weight: 800;';
+                } else if (key.includes('自耗电') || key.includes('功耗')) {
+                    itemStyle = 'border-left: 4px solid #d97706;';
+                    valueStyle = 'color: #c2410c; font-weight: 700;';
+                } else if (key.includes('油泵') || key.includes('加热器') || key.includes('快关') || key.includes('PLC')) {
+                    itemStyle = 'border-left: 4px solid #7c3aed;';
+                    valueStyle = 'color: #5b21b6; font-weight: 600;';
+                } else if (key.includes('润滑油量') || key.includes('冷却水')) {
+                    itemStyle = 'border-left: 4px solid #0284c7;';
+                    valueStyle = 'color: #0369a1; font-weight: 600;';
+                }
+
+                const formattedValue = formatNumberValue(key, value);
+                grid.innerHTML += `
+                    <div class="result-item" style="${itemStyle}">
+                        <div class="result-label">${key}</div>
+                        <div class="result-value" style="${valueStyle}">${formattedValue}</div>
+                    </div>
+                `;
             });
         }
 

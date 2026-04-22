@@ -620,6 +620,10 @@ async def run_power_calculation_internal(main_power: float, aspen_results: Dict[
                     "润滑油量(L)": f"{utility_power['lubrication_oil_amount']:.2f}",
                     "油冷器循环冷却水(m³/h)": f"{utility_power['oil_cooler_circulation_water']:.2f}",
                     "油泵功率(kW)": f"{utility_power['oil_pump_power']:.2f}",
+                    "润滑油电加热器(kW)": f"{utility_power['component_powers']['lubrication_heater']:.2f}",
+                    "快关阀(kW)": f"{utility_power['component_powers']['valve']:.2f}",
+                    "发电机加热器(kW)": f"{utility_power['component_powers']['generator_heater']:.2f}",
+                    "PLC柜(kW)": f"{utility_power['component_powers']['plc']:.2f}",
                     "公用功耗自耗电(kW)": f"{utility_power['utility_self_consumption']:.2f}",
                     "净发电功率(kW)": f"{utility_power['net_power_output']:.2f}"
                 },
@@ -712,45 +716,69 @@ def generate_technical_document(aspen_results: Dict[str, Any], power_results: Di
         outlet_pressure = request.outlet_pressure  # MPaA
         exhaust_temp = tech_params.get("进/排气温度(°C)", "25/45").split("/")[-1] or "45"
         
-        # 公用工程参数 - 使用 UtilityParams 类的属性值
+        # 公用工程参数 - 与 power_calculations.calculate_utility_power_consumption 模型一致
         utility_params_data = power_details.get("2_公用功耗", {})
-        
-        # 创建 UtilityParams 实例获取标准参数值
         utility_params_config = UtilityParams()
-        
-        # 设备功率参数 - 直接使用 UtilityParams 的属性值
-        oil_pump_power = str(utility_params_config.lubrication_pump_power)        # 辅油泵功率 (kW)
-        heater_power = str(utility_params_config.lubrication_heater_power)        # 润滑油电加热器功率 (kW) 
-        separator_power = "8"         # 油雾分离器功率 (kW) - UtilityParams中无对应项，保持固定值
-        space_heater_power = str(utility_params_config.generator_heater_power)    # 发电机加热器功率 (kW)
-        plc_power = str(utility_params_config.plc_power)                         # PLC柜功率 (kW)
-        
-        # 流量参数 - 直接使用 UtilityParams 的属性值
-        oil_cooler_flow = "850"       # 油冷器流量 (m³/Hr) - 从计算结果获取
-        lubrication_flow = str(int(utility_params_config.lubrication_oil_flow_rate))  # 润滑油流量 (L/min)
-        nitrogen_flow = str(utility_params_config.air_demand_nm3_per_h)           # 氮气流量 (Nm³/h)
-        compressed_air_demand = str(utility_params_config.air_demand_nm3)         # 压缩空气流量 (Nm³/h)
-        
-        # 尝试从实际计算结果中获取更精确的值
-        lubrication_oil_amount = utility_params_data.get("润滑油量(L)", "")
-        if lubrication_oil_amount:
+
+        def _parse_kw_field(data: Dict[str, Any], key: str, default: float) -> float:
+            raw = data.get(key)
+            if raw is None or raw == "":
+                return default
             try:
-                # 提取数值部分
-                oil_amount_value = float(lubrication_oil_amount)
-                # 可以根据实际油量调整流量，但这里保持UtilityParams的标准值
-                logger.info(f"润滑油量（计算值）: {oil_amount_value}L")
-            except:
-                pass
-        
-        # 尝试从油冷器循环冷却水计算中获取数值  
+                return float(str(raw).replace("kW", "").replace(" ", "").strip())
+            except (TypeError, ValueError):
+                return default
+
+        def _parse_float_field(data: Dict[str, Any], key: str, default: float) -> float:
+            raw = data.get(key)
+            if raw is None or raw == "":
+                return default
+            try:
+                return float(str(raw).split()[0].replace(",", ""))
+            except (TypeError, ValueError, IndexError):
+                return default
+
+        # 设备功率 (kW)：来自 2_公用功耗；缺新字段时按 power_calculations 规则回退
+        oil_pump_kw = _parse_kw_field(utility_params_data, "油泵功率(kW)", utility_params_config.lubrication_pump_power)
+        if "润滑油电加热器(kW)" in utility_params_data and utility_params_data["润滑油电加热器(kW)"] not in (None, ""):
+            heat_kw = _parse_kw_field(utility_params_data, "润滑油电加热器(kW)", 0.5 * oil_pump_kw)
+        else:
+            heat_kw = 0.5 * oil_pump_kw
+        oil_pump_power = f"{oil_pump_kw:.2f}"
+        heater_power = f"{heat_kw:.2f}"
+        # 模型无「油雾分离器」；auto_aspen_19 与自耗电分项一致填快关阀
+        if "快关阀(kW)" in utility_params_data and utility_params_data["快关阀(kW)"] not in (None, ""):
+            valve_kw = _parse_kw_field(utility_params_data, "快关阀(kW)", utility_params_config.valve_power)
+        else:
+            valve_kw = utility_params_config.valve_power
+        fast_cutoff_valve_power = f"{valve_kw:.2f}"
+        if "发电机加热器(kW)" in utility_params_data and utility_params_data["发电机加热器(kW)"] not in (None, ""):
+            gen_h_kw = _parse_kw_field(utility_params_data, "发电机加热器(kW)", 1.0)
+        else:
+            gen_h_kw = 1.0
+        space_heater_power = f"{gen_h_kw:.2f}"
+        if "PLC柜(kW)" in utility_params_data and utility_params_data["PLC柜(kW)"] not in (None, ""):
+            plc_kw = _parse_kw_field(utility_params_data, "PLC柜(kW)", 2.0)
+        else:
+            plc_kw = 2.0
+        plc_power = f"{plc_kw:.2f}"
+
+        # 流量：油冷器、润滑油量用模型结果；气量仍用 UtilityParams 缺省
+        oil_cooler_flow = "850"
+        lubrication_oil_val = _parse_float_field(
+            utility_params_data, "润滑油量(L)", utility_params_config.lubrication_oil_flow_rate
+        )
+        lubrication_flow = f"{lubrication_oil_val:.2f}"
+        nitrogen_flow = str(utility_params_config.air_demand_nm3_per_h)
+        compressed_air_demand = str(utility_params_config.air_demand_nm3)
+
         oil_cooler_water = utility_params_data.get("油冷器循环冷却水(m³/h)", "")
         if oil_cooler_water:
             try:
-                # 提取数值部分并使用实际计算值
-                water_value = float(oil_cooler_water)
-                oil_cooler_flow = str(int(water_value))  # 直接使用计算的循环水量
-                logger.info(f"油冷器循环水量（计算值）: {water_value} m³/Hr")
-            except:
+                water_value = float(str(oil_cooler_water).replace("m³/h", "").strip())
+                oil_cooler_flow = f"{water_value:.2f}"
+                logger.info(f"油冷器循环水量（模型计算值）: {water_value} m³/h")
+            except (TypeError, ValueError):
                 pass
         
         # 从功率计算结果中获取机组设计类型
@@ -800,11 +828,11 @@ def generate_technical_document(aspen_results: Dict[str, Any], power_results: Di
             "auto_aspen_15": str(float(coal_savings)),    # 年节约标准煤 (吨)
             "auto_aspen_16": str(float(co2_reduction)),   # 年减少CO₂排放 (吨)
             
-            # 机组公用工程 - 电源设备参数
+            # 机组公用工程 - 电源设备参数（与功率计算模型 component_powers 一致；19=快关阀）
             "auto_aspen_17": oil_pump_power,              # 辅油泵功率 (kW)
             "auto_aspen_18": heater_power,                # 润滑油电加热器功率 (kW)
-            "auto_aspen_19": separator_power,             # 油雾分离器功率 (kW)
-            "auto_aspen_20": space_heater_power,          # 发电机加热器=空间加热器功率 (kW)
+            "auto_aspen_19": fast_cutoff_valve_power,     # 快关阀功率 (kW)，原模板若写油雾分离器请改文案
+            "auto_aspen_20": space_heater_power,          # 发电机加热器功率 (kW)
             "auto_aspen_21": plc_power,                   # PLC柜功率 (kW)
             
             # 机组公用工程 - 水油气参数
@@ -827,14 +855,14 @@ def generate_technical_document(aspen_results: Dict[str, Any], power_results: Di
         output_name = f"技术方案_{timestamp}"
         
         # 输出公用工程参数用于调试
-        logger.info(f"公用工程参数配置（来源：UtilityParams）:")
-        logger.info(f"  辅油泵功率: {oil_pump_power} kW （UtilityParams.lubrication_pump_power）")
-        logger.info(f"  润滑油电加热器功率: {heater_power} kW （UtilityParams.lubrication_heater_power）") 
-        logger.info(f"  油雾分离器功率: {separator_power} kW （固定值）")
-        logger.info(f"  发电机加热器功率: {space_heater_power} kW （UtilityParams.generator_heater_power）")
-        logger.info(f"  PLC柜功率: {plc_power} kW （UtilityParams.plc_power）")
-        logger.info(f"  油冷器流量: {oil_cooler_flow} m³/Hr （计算值或默认值）")
-        logger.info(f"  润滑油流量: {lubrication_flow} L/min （UtilityParams.lubrication_oil_flow_rate）")
+        logger.info("公用工程参数配置（来源：功率计算模型 2_公用功耗 / UtilityParams 回退）")
+        logger.info(f"  辅油泵功率: {oil_pump_power} kW")
+        logger.info(f"  润滑油电加热器功率: {heater_power} kW")
+        logger.info(f"  快关阀功率: {fast_cutoff_valve_power} kW")
+        logger.info(f"  发电机加热器功率: {space_heater_power} kW")
+        logger.info(f"  PLC柜功率: {plc_power} kW")
+        logger.info(f"  油冷器循环冷却水: {oil_cooler_flow} m³/h")
+        logger.info(f"  润滑油量(查表用流量): {lubrication_flow} L/min 量级")
         logger.info(f"  氮气流量: {nitrogen_flow} Nm³/h （UtilityParams.air_demand_nm3_per_h）")
         logger.info(f"  空气需求量: {compressed_air_demand} Nm³/h （UtilityParams.air_demand_nm3）")
         
@@ -1064,6 +1092,7 @@ def create_combined_results(aspen_results: Dict[str, Any], power_results: Dict[s
                 "性能指标": aspen_sim.get("performance_metrics", {})
             },
             "机组选型结果": power_selection,
+            "公用功耗": power_details.get("计算过程详情", {}).get("2_公用功耗", {}),
             "经济性分析": power_details.get("计算过程详情", {}).get("3_经济性分析", {}),
             "验证结果": power_results.get("validation_results", {}),
             "文档下载": document_urls if document_urls else {}
