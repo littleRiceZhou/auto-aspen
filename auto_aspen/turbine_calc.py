@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from scipy.interpolate import LinearNDInterpolator, NearestNDInterpolator
+from scipy.interpolate import griddata
 import os
 import logging
 
@@ -19,50 +19,249 @@ def _cap_nd_points(df_part: pd.DataFrame) -> pd.DataFrame:
     return df_part.sample(n=_MAX_ND_INTERP_POINTS, random_state=42)
 
 
-def _df_p3_strategies(df: pd.DataFrame, p3: float, s0: float) -> list:
-    """
-    为 (P,S) 上插值 (p3,s0) 处的 h、T 准备若干子表，按优先顺序由调用方尝试。
-    - ps: 压力带 + 熵向带（同一条等熵线上 s≈s0，必须在 S 上约束）
-    - p:  仅压力带
-    - full: 全量物性点
-    """
-    p3_margin = max(p3 * 0.2, 1.0)
-    s_abs = max(abs(float(s0)), 1.0)
-    s_margin = max(s_abs * 0.25, 50.0)
-    out = []
-    m_p = (df[2] > p3 - p3_margin) & (df[2] < p3 + p3_margin)
-    m_s = (df[5] > s0 - s_margin) & (df[5] < s0 + s_margin)
-    d_ps = df[m_p & m_s]
-    if len(d_ps) >= 10:
-        out.append(d_ps)
-    d_p = df[m_p]
-    if len(d_p) >= 10:
-        out.append(d_p)
-    out.append(df)
-    return out
+def _atolerance(val: float) -> float:
+    """与物性表浮点列匹配的容差，对齐 MATLAB 在相邻网格层上取行。"""
+    a = float(abs(val))
+    return max(0.1, 1e-5 * a)
 
 
-def _nd_interp_callable(points: np.ndarray, values: np.ndarray):
+def _bracket1d(x_sorted: np.ndarray, x: float) -> tuple:
     """
-    先线性 ND 插值；查询点落在数据凸包外时 LinearND 为 nan，再回退到最近邻，
-    避免效率等指标变成 nan（main 中联动的 Aspen 等熵效率会因此失效）。
+    在一维已升序、唯一格点上为 x 取包络对 (lo, hi)；若与格点重合则返回 (x,x)。
+    x_sorted: 来自 np.sort(np.unique(...))
     """
-    points = np.asarray(points, dtype=float)
-    values = np.asarray(values, dtype=float)
-    linear = LinearNDInterpolator(points, values)
-    nearest = None
+    xs = np.asarray(x_sorted, dtype=float)
+    if xs.size == 0:
+        raise ValueError("empty grid")
+    at = _atolerance(x)
+    if np.any(np.abs(xs - x) <= at):
+        xeq = float(xs[np.argmin(np.abs(xs - x))])
+        return xeq, xeq
+    lo = xs[xs < x]
+    hi = xs[xs > x]
+    if lo.size and hi.size:
+        return float(lo.max()), float(hi.min())
+    if not lo.size and hi.size:
+        return float(hi.min()), float(hi.min())
+    if lo.size and not hi.size:
+        return float(lo.max()), float(lo.max())
+    return float(xs[0]), float(xs[-1])
 
-    def _call(*xi):
-        nonlocal nearest
-        v = linear(*xi)
-        v = float(np.asarray(v).reshape(-1)[0])
-        if np.isfinite(v):
-            return v
-        if nearest is None:
-            nearest = NearestNDInterpolator(points, values)
-        return float(nearest(*xi))
 
-    return _call
+def _kfo_dataframe_turbm(df: pd.DataFrame, p3: float) -> pd.DataFrame:
+    """
+    对齐 turbExpander_1D.m §3：先按压力排序，取包络 p3 的相邻压力层上全部行 (kfo)，
+    再在该子集上按熵用 scatteredInterpolant(P,S,.) 在 (p3,s0) 处插值。
+    不能对全表做随机下采样，否则会破坏 (P,S) 网格结构，导致 dhs<0 或全 mock。
+    """
+    pv = df[2].to_numpy(dtype=float)
+    p_uni = np.sort(np.unique(pv))
+    p_lo, p_hi = _bracket1d(p_uni, float(p3))
+    at_lo, at_hi = _atolerance(p_lo), _atolerance(p_hi)
+    if p_lo == p_hi:
+        m = np.abs(pv - p_lo) < at_lo
+    else:
+        m = (np.abs(pv - p_lo) < at_lo) | (np.abs(pv - p_hi) < at_hi)
+    kfo = df[m]
+    if len(kfo) < 4:
+        return df
+    return kfo
+
+
+def _pt_corner_mean(df: pd.DataFrame, p_c: float, t_c: float, jcol: int) -> float:
+    """在 (P,T) 表上取与格点 (p_c,t_c) 匹配行的物性 jcol 均值；无匹配为 nan。"""
+    Pv = df[2].to_numpy(dtype=float)
+    Tv = df[1].to_numpy(dtype=float)
+    atp, att = _atolerance(p_c), _atolerance(t_c)
+    for f in (1.0, 2.0, 5.0, 10.0):
+        m = (np.abs(Pv - p_c) < f * atp) & (np.abs(Tv - t_c) < f * att)
+        if np.any(m):
+            return float(np.mean(df.loc[m, jcol].to_numpy()))
+    return float("nan")
+
+
+def _bilinear_inlet_property(df: pd.DataFrame, p0: float, t0: float, jcol: int) -> float:
+    """
+    在 (P,T) 上双线性插值，对齐 REFPROP/CSV 的矩形网格，避免 subframe+griddata+随机下采样
+    导致 h0/s0 与 (p0,T0) 不一致、进而 dhs<0。
+    """
+    p_u = np.sort(np.unique(df[2].to_numpy(dtype=float)))
+    t_u = np.sort(np.unique(df[1].to_numpy(dtype=float)))
+    if p_u.size < 1 or t_u.size < 1:
+        return float("nan")
+    p0c = float(np.clip(p0, p_u[0], p_u[-1]))
+    t0c = float(np.clip(t0, t_u[0], t_u[-1]))
+    p_lo, p_hi = _bracket1d(p_u, p0c)
+    t_lo, t_hi = _bracket1d(t_u, t0c)
+    v00 = _pt_corner_mean(df, p_lo, t_lo, jcol)
+    v10 = _pt_corner_mean(df, p_hi, t_lo, jcol)
+    v01 = _pt_corner_mean(df, p_lo, t_hi, jcol)
+    v11 = _pt_corner_mean(df, p_hi, t_hi, jcol)
+    if not all(np.isfinite((v00, v10, v01, v11))):
+        return float("nan")
+    if p_lo == p_hi and t_lo == t_hi:
+        return v00
+    if p_lo == p_hi:
+        b = 0.0 if abs(t_hi - t_lo) < 1e-30 else (t0c - t_lo) / (t_hi - t_lo)
+        b = min(1.0, max(0.0, b))
+        return v00 * (1 - b) + v01 * b
+    if t_lo == t_hi:
+        a = 0.0 if abs(p_hi - p_lo) < 1e-30 else (p0c - p_lo) / (p_hi - p_lo)
+        a = min(1.0, max(0.0, a))
+        return v00 * (1 - a) + v10 * a
+    a = (p0c - p_lo) / (p_hi - p_lo)
+    b = (t0c - t_lo) / (t_hi - t_lo)
+    a = min(1.0, max(0.0, a))
+    b = min(1.0, max(0.0, b))
+    return (1 - a) * (1 - b) * v00 + (1 - a) * b * v01 + a * (1 - b) * v10 + a * b * v11
+
+
+def _isentropic_h_t_bilinear(
+    df: pd.DataFrame, p3: float, s0: float
+) -> tuple:
+    """
+    在两条等压 p_lo/p_hi 上沿熵 s 一维查 h、T，再对压力 p3 在 [p_lo,p_hi] 上线性插值。
+    与 turbExpander_1D.m 的 kfo+(P,S) 插值在结构化网格上物理等价，不依赖 2D Delaunay/随机下采样。
+    """
+    p_raw = np.sort(np.unique(df[2].to_numpy(dtype=float)))
+    if p_raw.size < 1:
+        return float("nan"), float("nan")
+    p3n = float(np.clip(p3, p_raw[0], p_raw[-1]))
+    p_lo, p_hi = _bracket1d(p_raw, p3n)
+    at_lo, at_hi = _atolerance(p_lo), _atolerance(p_hi)
+
+    def h_t_on_isobar(p_c: float, at: float) -> tuple:
+        m = np.abs(df[2].to_numpy(dtype=float) - p_c) < at
+        sl = df.loc[m]
+        if len(sl) < 2:
+            return float("nan"), float("nan")
+        Sx = sl[5].to_numpy(dtype=float)
+        h = sl[4].to_numpy(dtype=float)
+        t = sl[1].to_numpy(dtype=float)
+        o = np.argsort(Sx)
+        Sx, h, t = Sx[o], h[o], t[o]
+        s_min, s_max = float(Sx[0]), float(Sx[-1])
+        sq = float(np.clip(s0, s_min, s_max))
+        he = float(np.interp(sq, Sx, h, left=float(h[0]), right=float(h[-1])))
+        te = float(np.interp(sq, Sx, t, left=float(t[0]), right=float(t[-1])))
+        return he, te
+
+    if p_lo == p_hi:
+        return h_t_on_isobar(p_lo, at_lo)
+    h_lo, t_lo = h_t_on_isobar(p_lo, at_lo)
+    h_hi, t_hi = h_t_on_isobar(p_hi, at_hi)
+    if not (np.isfinite(h_lo) and np.isfinite(h_hi) and np.isfinite(t_lo) and np.isfinite(t_hi)):
+        return float("nan"), float("nan")
+    if abs(p_hi - p_lo) < 1e-20 * max(abs(p_hi), 1.0):
+        return 0.5 * (h_lo + h_hi), 0.5 * (t_lo + t_hi)
+    a = (p3n - p_lo) / (p_hi - p_lo)
+    a = min(1.0, max(0.0, a))
+    he3 = h_lo * (1.0 - a) + h_hi * a
+    te3 = t_lo * (1.0 - a) + t_hi * a
+    return he3, te3
+
+
+def _inlet_subframe_turbm(df: pd.DataFrame, p0: float, t0: float) -> pd.DataFrame:
+    """
+    对齐 M 代码 §2：在 (P,T) 上取包络 p0、T0 的相邻格点形成的局部块（kfl→kf 思想），
+    用于 scatteredInterpolant(P,T,·)，与 20% 带宽+随机下采样不同。
+    """
+    pv = df[2].to_numpy(dtype=float)
+    tv = df[1].to_numpy(dtype=float)
+    p_uni = np.sort(np.unique(pv))
+    t_uni = np.sort(np.unique(tv))
+    p_lo, p_hi = _bracket1d(p_uni, float(p0))
+    t_lo, t_hi = _bracket1d(t_uni, float(t0))
+    atp, att = _atolerance(p0), _atolerance(t0)
+    if p_lo == p_hi and t_lo == t_hi:
+        m = (np.abs(pv - p_lo) < atp) & (np.abs(tv - t_lo) < att)
+    elif p_lo == p_hi:
+        m = (np.abs(pv - p_lo) < atp) & ((np.abs(tv - t_lo) < att) | (np.abs(tv - t_hi) < att))
+    elif t_lo == t_hi:
+        m = (np.abs(tv - t_lo) < att) & ((np.abs(pv - p_lo) < atp) | (np.abs(pv - p_hi) < atp))
+    else:
+        m = ((np.abs(pv - p_lo) < atp) | (np.abs(pv - p_hi) < atp)) & (
+            (np.abs(tv - t_lo) < att) | (np.abs(tv - t_hi) < att)
+        )
+    kf = df[m]
+    if len(kf) < 4:
+        pm, Tm = max(abs(p0) * 0.2, 1.0), max(abs(t0) * 0.2, 1.0)
+        kf = df[(df[2] > p0 - pm) & (df[2] < p0 + pm) & (df[1] > t0 - Tm) & (df[1] < t0 + Tm)]
+    if len(kf) < 4:
+        return df
+    return kf
+
+
+def _interp_1d_grouped_mean(xq: float, x: np.ndarray, v: np.ndarray) -> float:
+    """一维线性插值；同 x 多点时对 v 取平均。"""
+    df = pd.DataFrame({"x": x, "v": v}).groupby("x", sort=True, as_index=False).mean()
+    xs, vs = df["x"].to_numpy(), df["v"].to_numpy()
+    if len(xs) < 2:
+        return float(vs[0]) if len(xs) == 1 and np.isfinite(vs[0]) else float("nan")
+    return float(np.interp(xq, xs, vs, left=np.nan, right=np.nan))
+
+
+def _griddata_2d_safe(x: np.ndarray, y: np.ndarray, v: np.ndarray, xq: float, yq: float) -> float:
+    """
+    2D linear 插值；当点集退化为直线（qhull: all same x）时改为一维插值，避免 QH6013。
+    """
+    x = np.asarray(x, dtype=float).ravel()
+    y = np.asarray(y, dtype=float).ravel()
+    v = np.asarray(v, dtype=float).ravel()
+    n = x.size
+    if n < 2:
+        return float(v[0]) if n == 1 and np.isfinite(v[0]) else float("nan")
+    scale = max(float(np.max(np.abs(np.concatenate([x, y, [xq, yq]])))), 1.0)
+    tol = max(1e-9 * scale, 1e-10)
+    rx = float(np.ptp(x))
+    ry = float(np.ptp(y))
+
+    if rx < tol and ry < tol:
+        return float(np.mean(v))
+    if rx < tol:
+        return _interp_1d_grouped_mean(yq, y, v)
+    if ry < tol:
+        return _interp_1d_grouped_mean(xq, x, v)
+
+    pts = np.column_stack((x, y))
+    xi = np.array([[xq, yq]], dtype=float)
+    z0 = float("nan")
+    try:
+        z = griddata(pts, v, xi, method="linear")
+        z0 = float(z.reshape(-1)[0]) if z.size else float("nan")
+    except Exception:
+        z0 = float("nan")
+    if not np.isfinite(z0):
+        try:
+            z = griddata(pts, v, xi, method="nearest")
+            z0 = float(z.reshape(-1)[0]) if z.size else float("nan")
+        except Exception:
+            z0 = float("nan")
+    return z0
+
+
+def _griddata_pt(dfp: pd.DataFrame, p0: float, t0: float, col: int) -> float:
+    """对齐 M 代码 §2：在 (P,T) 上 linear 插值；与 scatteredInterpolant linear 等价。"""
+    P = dfp[2].to_numpy(dtype=float)
+    T = dfp[1].to_numpy(dtype=float)
+    V = dfp[col].to_numpy(dtype=float)
+    return _griddata_2d_safe(P, T, V, float(p0), float(t0))
+
+
+def _griddata_ps(dfp: pd.DataFrame, p3: float, s0: float, col: int) -> float:
+    """对齐 M 代码 §3：在 (P,S) 上 linear 插值；与 scatteredInterpolant(ppe3,sse3,.,'linear') 等价。"""
+    P = dfp[2].to_numpy(dtype=float)
+    S = dfp[5].to_numpy(dtype=float)
+    V = dfp[col].to_numpy(dtype=float)
+    return _griddata_2d_safe(P, S, V, float(p3), float(s0))
+
+
+def _griddata_hs(dfp: pd.DataFrame, h1s: float, s0: float, col: int) -> float:
+    """(H,S) 平面插值，对齐喷嘴出口在 H–S 表上的查表。"""
+    H = dfp[4].to_numpy(dtype=float)
+    S = dfp[5].to_numpy(dtype=float)
+    V = dfp[col].to_numpy(dtype=float)
+    return _griddata_2d_safe(H, S, V, float(h1s), float(s0))
 
 
 class TurbineExpander1D:
@@ -109,7 +308,7 @@ class TurbineExpander1D:
             return cached[1], config
         # MATLAB code uses importdata, which skips headers.
         # Headers on lines 1–2; data columns are T,P,D,H,S,CP,CV,A,... (col 0 in file is empty).
-        # 损坏行（如行号误入首列）会使 T 为 NaN，导致 LinearNDInterpolator 报错 "Points cannot contain NaN"。
+        # 损坏行（如行号误入首列）会使 T 为 NaN，需在后续 dropna。
         df = pd.read_csv(
             csv_path,
             skiprows=2,
@@ -156,61 +355,58 @@ class TurbineExpander1D:
             return self._get_mock_result("质量流量无效")
 
         try:
-            # --- 1. 进口状态插值 ---
-            # ... (保持原有逻辑)
-            # 优化：只取进口压力和温度附近的子集进行插值，提高速度
-            p_margin = p0 * 0.2
-            T_margin = T0 * 0.2
-            mask = (df[2] > p0 - p_margin) & (df[2] < p0 + p_margin) & \
-                (df[1] > T0 - T_margin) & (df[1] < T0 + T_margin)
-            df_sub = df[mask]
-            if len(df_sub) < 10: # 如果子集太小，回退到全集
-                df_sub = df
-            df_sub = _cap_nd_points(df_sub)
+            # --- 1. 进口状态：(P,T) 双线性，与 M §2 / REFPROP 网格一致；不用随机下采样，避免 s0 失真---
+            rho0 = _bilinear_inlet_property(df, p0, T0, 3)
+            h0 = _bilinear_inlet_property(df, p0, T0, 4)
+            s0 = _bilinear_inlet_property(df, p0, T0, 5)
+            cp0 = _bilinear_inlet_property(df, p0, T0, 6)
+            cv0 = _bilinear_inlet_property(df, p0, T0, 7)
+            cs0 = _bilinear_inlet_property(df, p0, T0, 8)
 
-            points = df_sub[[2, 1]].values # P, T
-            
-            interp_rho = _nd_interp_callable(points, df_sub[3].values)
-            interp_h = _nd_interp_callable(points, df_sub[4].values)
-            interp_s = _nd_interp_callable(points, df_sub[5].values)
-            interp_cp = _nd_interp_callable(points, df_sub[6].values)
-            interp_cv = _nd_interp_callable(points, df_sub[7].values)
-            interp_cs = _nd_interp_callable(points, df_sub[8].values)
+            if not all(np.isfinite(x) for x in (rho0, h0, s0, cp0, cv0, cs0)):
+                df_in = _inlet_subframe_turbm(df, p0, T0)
+                rho0 = _griddata_pt(df_in, p0, T0, 3)
+                h0 = _griddata_pt(df_in, p0, T0, 4)
+                s0 = _griddata_pt(df_in, p0, T0, 5)
+                cp0 = _griddata_pt(df_in, p0, T0, 6)
+                cv0 = _griddata_pt(df_in, p0, T0, 7)
+                cs0 = _griddata_pt(df_in, p0, T0, 8)
+            if not all(np.isfinite(x) for x in (rho0, h0, s0, cp0, cv0, cs0)):
+                return self._get_mock_result("物性插值结果无效(进口)")
 
-            rho0 = interp_rho(p0, T0)
-            h0 = interp_h(p0, T0)
-            s0 = interp_s(p0, T0)
-            cp0 = interp_cp(p0, T0)
-            cv0 = interp_cv(p0, T0)
-            cs0 = interp_cs(p0, T0)
+            # --- 2. 等熵出口：两等压线之间对 p3 插值、每条等压线上对 s0 查 h、T；与 M §3 物理一致---
+            he3, Te3 = _isentropic_h_t_bilinear(df, p3, s0)
+            dhs = h0 - he3
 
-            # --- 2. 等熵膨胀出口状态（在 (P,S) 平面上对 (p3, s0) 插值 h、T）---
-            # 仅按压力带选点会缺少 s0 附近熵向覆盖，(p3,s0) 易不物理，导致 dhs<0
-            he3 = float("nan")
-            Te3 = float("nan")
-            dhs = -1.0
-            df_p3 = None
-            for dfraw in _df_p3_strategies(df, p3, s0):
-                for do_cap in (True, False):
-                    if not do_cap and len(dfraw) > 80000:
-                        continue
-                    dfp = _cap_nd_points(dfraw) if do_cap else dfraw
-                    if len(dfp) < 4:
-                        continue
-                    psp = dfp[[2, 5]].values
-                    ih = _nd_interp_callable(psp, dfp[4].values)
-                    it = _nd_interp_callable(psp, dfp[1].values)
-                    h3, t3 = ih(p3, s0), it(p3, s0)
-                    d_try = h0 - h3
-                    if (
-                        all(np.isfinite(x) for x in (h0, s0, h3, t3, rho0))
-                        and d_try > 0
-                    ):
-                        he3, Te3, dhs, df_p3 = h3, t3, d_try, dfp
-                        break
-                if df_p3 is not None:
-                    break
-            if df_p3 is None or dhs <= 0:
+            if dhs <= 0 or not all(np.isfinite(x) for x in (he3, Te3, dhs)):
+                kfo = _kfo_dataframe_turbm(df, p3)
+                if len(kfo) < 4:
+                    pm = max(p3 * 0.2, 1.0)
+                    kfo = df[(df[2] > p3 - pm) & (df[2] < p3 + pm)]
+                if len(kfo) < 4:
+                    kfo = df
+                he3 = _griddata_ps(kfo, p3, s0, 4)
+                Te3 = _griddata_ps(kfo, p3, s0, 1)
+                dhs = h0 - he3
+
+            if dhs <= 0 or not all(np.isfinite(x) for x in (he3, Te3, dhs)):
+                pm = max(p3 * 0.1, 1.0)
+                sm2 = max(abs(s0) * 0.35, 200.0)
+                dfr = df[
+                    (df[2] > p3 - pm)
+                    & (df[2] < p3 + pm)
+                    & (df[5] > s0 - sm2)
+                    & (df[5] < s0 + sm2)
+                ]
+                if len(dfr) < 30:
+                    dfr = df[(df[2] > p3 - 3 * pm) & (df[2] < p3 + 3 * pm)]
+                if len(dfr) > 150000:
+                    dfr = dfr.iloc[:: max(1, len(dfr) // 100000) ].copy()
+                he3 = _griddata_ps(dfr, p3, s0, 4)
+                Te3 = _griddata_ps(dfr, p3, s0, 1)
+                dhs = h0 - he3
+
+            if dhs <= 0 or not all(np.isfinite(x) for x in (he3, Te3, dhs)):
                 return self._get_mock_result("物性插值结果无效(焓/熵)")
 
             # --- 3. 热力计算 ---
@@ -218,6 +414,7 @@ class TurbineExpander1D:
             dhsstaa = dhs - dhsrott  # 导叶内理想焓降
             if dhsstaa <= 0 or not all(np.isfinite(x) for x in (he3, Te3)):
                 return self._get_mock_result("物性插值结果无效(焓/熵)")
+
 
             power = m_flow * dhs * 0.85  # 预估功率
             cs = np.sqrt(2 * dhs)
@@ -228,29 +425,23 @@ class TurbineExpander1D:
             
             # 喷嘴出口状态
             h1s = h0 - dhsstaa
-            h1s_margin = max(abs(h1s) * 0.2, 1.0)
+            h1s_margin = max(abs(h1s) * 0.2, 500.0)
             s_m_h = max(abs(s0) * 0.15, 30.0)
-            mask_h1s = (df[4] > h1s - h1s_margin) & (df[4] < h1s + h1s_margin) & (
+            mhs = (df[4] > h1s - h1s_margin) & (df[4] < h1s + h1s_margin) & (
                 (df[5] > s0 - s_m_h) & (df[5] < s0 + s_m_h)
             )
-            df_h1s = df[mask_h1s]
+            df_h1s = df[mhs]
             if len(df_h1s) < 10:
-                mask_h1s = (df[4] > h1s - h1s_margin) & (df[4] < h1s + h1s_margin)
-                df_h1s = df[mask_h1s]
+                df_h1s = df[(df[4] - h1s).abs() < 5 * h1s_margin]
             if len(df_h1s) < 10:
                 df_h1s = df
-            df_h1s = _cap_nd_points(df_h1s)
+            if len(df_h1s) > 80000:
+                df_h1s = _cap_nd_points(df_h1s)
 
-            points_hs = df_h1s[[4, 5]].values # H, S
-            interp_p_at_hs = _nd_interp_callable(points_hs, df_h1s[2].values)
-            interp_t_at_hs = _nd_interp_callable(points_hs, df_h1s[1].values)
-            interp_rho_at_hs = _nd_interp_callable(points_hs, df_h1s[3].values)
-            interp_a_at_hs = _nd_interp_callable(points_hs, df_h1s[8].values)
-            
-            p1 = interp_p_at_hs(h1s, s0)
-            T1 = interp_t_at_hs(h1s, s0)
-            rho1 = interp_rho_at_hs(h1s, s0)
-            a1 = interp_a_at_hs(h1s, s0)
+            p1 = _griddata_hs(df_h1s, h1s, s0, 2)
+            T1 = _griddata_hs(df_h1s, h1s, s0, 1)
+            rho1 = _griddata_hs(df_h1s, h1s, s0, 3)
+            a1 = _griddata_hs(df_h1s, h1s, s0, 8)
 
             if not all(np.isfinite(x) for x in (p1, T1, rho1, a1)) or a1 <= 0 or rho1 <= 0:
                 return self._get_mock_result("物性插值结果无效(喷嘴区)")
