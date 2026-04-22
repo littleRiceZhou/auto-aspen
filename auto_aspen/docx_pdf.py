@@ -80,18 +80,18 @@ def get_auto_aspen_parameter_mapping():
         "auto_aspen_15": "184.0",     # 年节约标准煤 (吨)
         "auto_aspen_16": "505.4",     # 年减少CO₂排放 (吨)
         
-        # 机组公用工程 - 电源设备参数
-        "auto_aspen_17": "15",        # 辅油泵功率 (kW)
-        "auto_aspen_18": "12",        # 润滑油电加热器功率 (kW)
-        "auto_aspen_19": "8",         # 油雾分离器功率 (kW)
-        "auto_aspen_20": "1",         # 发电机加热器=空间加热器功率 (kW)
-        "auto_aspen_21": "3",         # PLC柜功率 (kW)
+        # 机组公用工程 - 电源设备参数（与 main.generate_technical_document / 2_公用功耗 一致）
+        "auto_aspen_17": "15",        # 油泵功率 kW（辅油泵，查表）
+        "auto_aspen_18": "12",        # 润滑油电加热器 kW（模型为 0.5×油泵）
+        "auto_aspen_19": "0.5",       # 快关阀 kW（模型无油雾分离器；勿与模板「油雾分离器」混用）
+        "auto_aspen_20": "1",         # 发电机加热器 kW
+        "auto_aspen_21": "2",         # PLC 柜 kW
         
         # 机组公用工程 - 水油气参数
-        "auto_aspen_22": "850",       # 油冷器流量 (m³/Hr)
-        "auto_aspen_23": "45",        # 齿轮箱润滑油流量 (L/min)
-        "auto_aspen_24": "120",       # 氮气-干气密封气体流量 (Nm³/h)
-        "auto_aspen_25": "95",        # 压缩空气-气动阀气体流量 (Nm³/h)
+        "auto_aspen_22": "850",       # 油冷器循环冷却水 (m³/h)，实算覆盖
+        "auto_aspen_23": "45",        # 润滑油量/查表流量 (L/min 量级，实算覆盖)
+        "auto_aspen_24": "120",       # 氮气 (Nm³/h)，缺省来自 UtilityParams
+        "auto_aspen_25": "95",        # 压缩空气 (Nm³/h)，缺省来自 UtilityParams
         
         # 用户信息
         "auto_aspen_26": "用户姓名",     # 用户名称
