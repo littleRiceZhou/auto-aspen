@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException, Body
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
-from typing import Dict, Any, Optional, List, Literal
+from typing import Dict, Any, Optional, List, Literal, Tuple
 import traceback
 import os
 import getpass
@@ -228,39 +228,106 @@ def get_user_name(request_user_name: str = None) -> str:
         return "系统用户"
 
 
+def _gas_composition_log_line(comp: GasComposition) -> str:
+    """非零组分摘要，便于日志对照多组分工况。"""
+    d = comp.model_dump() if hasattr(comp, "model_dump") else comp.dict()
+    parts = [f"{k}={float(v or 0):.2f}%" for k, v in sorted(d.items()) if float(v or 0) > 0]
+    return ", ".join(parts) if parts else "(占比全0，一维默认 CH4)"
+
+
 def _fluid_for_turbine_expander(request: SimulationRequest) -> str:
-    """与透平一维计算、机组选型中一致的工质选择逻辑。"""
+    """
+    与透平一维物性表（TurbineExpander1D.FLUID_CONFIG）对应的代表工质。
+
+    一维只有单组分物性表；多组分按「主分率」选一种（占比最高；并列时按 TIE_ORDER 靠前优先）。
+    无可用非零组分（或仅 HE/H2S/C2H2 等无一维表）时回退 CH4。
+    """
     comp = request.gas_composition
-    if comp.H2 > 50:
-        return "H2"
-    if comp.C2H6 > 20:
-        return "C2H6"
-    if comp.N2 > 50:
-        return "N2"
-    if comp.CO2 > 20:
-        return "CO2"
-    return "CH4"
+    field_to_fluid = [
+        ("H2", lambda: comp.H2),
+        ("O2", lambda: comp.O2),
+        ("N2", lambda: comp.N2),
+        ("CO2", lambda: comp.CO2),
+        ("CH4", lambda: comp.CH4),
+        ("C2H4", lambda: comp.C2H4),
+        ("C2H6", lambda: comp.C2H6),
+        ("C3H8", lambda: comp.C3H8),
+        ("nC4H10", lambda: comp.C4H10),
+        ("H2O", lambda: comp.H2O),
+    ]
+    cfg = TurbineExpander1D.FLUID_CONFIG
+    items: List[Tuple[str, float]] = []
+    for fluid_name, getter in field_to_fluid:
+        if fluid_name not in cfg:
+            continue
+        p = float(getter() or 0.0)
+        if p > 0:
+            items.append((fluid_name, p))
+    if not items:
+        return "CH4"
+    # 并列：占比相同则 TIE_ORDER 中靠前的组分作为代表
+    tie_order = ("H2", "O2", "N2", "CO2", "CH4", "C2H4", "C2H6", "C3H8", "nC4H10", "H2O")
+
+    def _key(x: Tuple[str, float]) -> Tuple[float, int]:
+        n, p = x
+        oi = tie_order.index(n) if n in tie_order else 0
+        return (p, -oi)
+
+    return max(items, key=_key)[0]
+
+
+def _te_cm3_rand_from_env() -> Optional[float]:
+    """
+    透平一维 cm3 = c1*(0.4-r*0.05) 中 r 的来源。
+    未设置时与 MATLAB 一致用随机；设置 AUTO_ASPEN_TE1D_CM3 为 0~1 可固定 r（如 0.5 为旧版中点，便于复现）。
+    """
+    s = (os.environ.get("AUTO_ASPEN_TE1D_CM3") or "").strip()
+    if not s:
+        return None
+    try:
+        return float(s)
+    except ValueError:
+        logger.warning("AUTO_ASPEN_TE1D_CM3 非有效数字，透平一维 cm3 使用随机 r")
+        return None
 
 
 def _te_isentropic_efficiency_percent(request: SimulationRequest) -> Optional[float]:
     """
     透平一维设计得到的设计效率（0~1）转为 Aspen 等熵效率输入（%）。
     成功则用于仿真前覆盖请求中的 efficiency，使 Aspen 与一维指标一致。
+
+    注意：turbine_calc 中 eta = 0.9 - 0.025*sqrt(yts)，yts 由 phi、psii 等无量纲量构成；
+    在部分工况下不同物性表算出的 yts 相同，故 eta 可完全一致（工质仍影响叶轮直径、转速等，见日志）。
     """
     try:
+        comp_line = _gas_composition_log_line(request.gas_composition)
         fluid = _fluid_for_turbine_expander(request)
         te_calc = TurbineExpander1D()
+        _cm3 = _te_cm3_rand_from_env()
         te_res = te_calc.calculate(
             p0=request.inlet_pressure * 1e6,
             T0=request.inlet_temperature + 273.15,
             p3=request.outlet_pressure * 1e6,
             mv=request.gas_flow_rate,
             fluid=fluid,
+            cm3_rand=_cm3,
         )
         eta = float(te_res["efficiency"])
         if math.isfinite(eta) and 0 < eta <= 1.0:
             pct = eta * 100.0
-            logger.info(f"透平一维设计效率联动 Aspen 等熵效率: {eta:.4f} -> {pct:.4f}%")
+            logger.info(
+                f"气体组成(非零): {comp_line} | 一维代表工质(主分率)={fluid} | "
+                f"p0={request.inlet_pressure}MPaA T0={request.inlet_temperature}°C "
+                f"p3={request.outlet_pressure}MPaA scmh={request.gas_flow_rate}"
+            )
+            logger.info(
+                f"透平一维几何(随工质/物性变): 叶轮直径(m)={te_res.get('impeller_diameter_m')}, "
+                f"转速(rpm)={te_res.get('speed_rpm')}, 喷嘴Ma={te_res.get('nozzle_mach')}, 功率(kW)={te_res.get('power_kw')}"
+            )
+            logger.info(
+                f"透平一维设计效率联动 Aspen 等熵效率: {eta:.4f} -> {pct:.4f}% | "
+                "同工况下该经验式可给出与物性表无关的相同 yts,故数值可不变(混合物仅单组分表近似)"
+            )
             return pct
         logger.warning(f"透平一维效率异常 ({eta})，保留请求中的效率")
     except Exception as e:
@@ -577,13 +644,14 @@ async def run_power_calculation_internal(main_power: float, aspen_results: Dict[
         try:
             fluid = _fluid_for_turbine_expander(request)
             te_calc = TurbineExpander1D()
-            # mv 单位转换: scmh -> Nm3/s (1 scmh = 1/3600 Nm3/s)
+            # mv: scmh，与一维 m=mv*RMCP/3600 一致
             te_res = te_calc.calculate(
                 p0=request.inlet_pressure * 1e6, 
                 T0=request.inlet_temperature + 273.15, 
                 p3=request.outlet_pressure * 1e6, 
-                mv=request.gas_flow_rate, # 内部会自动除以 3600
-                fluid=fluid
+                mv=request.gas_flow_rate, 
+                fluid=fluid,
+                cm3_rand=_te_cm3_rand_from_env(),
             )
             selection_output["选型输出"]["透平一维设计指标"] = {
                 "叶轮直径(m)": f"{te_res['impeller_diameter_m']:.4f}",

@@ -3,6 +3,12 @@ import numpy as np
 from scipy.interpolate import griddata
 import os
 import logging
+from typing import Any, Optional, Tuple
+
+# 与 turbExpander_1D.m 中字面常量一致（M 在 D1/nnnr 用 3.14159，在 uuu 用 3.14）
+MATLAB_PI_D1 = 3.14159
+MATLAB_PI_NNNR = 3.14159
+MATLAB_PI_UUU = 3.14
 
 # 物性 CSV 只读缓存：避免每次 API 请求重复解析约 25 万行
 _FLUID_DF_CACHE = {}  # abs_csv_path -> (mtime, DataFrame)
@@ -264,6 +270,34 @@ def _griddata_hs(dfp: pd.DataFrame, h1s: float, s0: float, col: int) -> float:
     return _griddata_2d_safe(H, S, V, float(h1s), float(s0))
 
 
+def _nozzle_state_matlab_mink(
+    df: pd.DataFrame, h1s: float, s0: float
+) -> Tuple[float, float, float, float]:
+    """
+    对齐 turbExpander_1D.m L283–304：对全表先按与 h1s 的 |h–h1s| 取 1000 个最近点，
+    再在其中按 |s–s0| 取 6 个最近点，按 s 差升序排列，取**第 3 行**为喷嘴出口 (p,T,rho,a)。
+    """
+    hcol, scol = 4, 5
+    h = df[hcol].to_numpy(dtype=np.float64)
+    d_h = np.abs(h - h1s)
+    n = len(d_h)
+    if n < 1:
+        return (float("nan"),) * 4
+    k1 = min(1000, n)
+    idx1 = np.argpartition(d_h, k1 - 1)[:k1]
+    fl91nb = df.iloc[idx1]
+    srows = fl91nb[scol].to_numpy(dtype=np.float64)
+    d_s = np.abs(srows - float(s0))
+    m = len(d_s)
+    k2 = min(6, m)
+    o = np.argsort(d_s)[:k2]
+    fl91nc = fl91nb.iloc[o]
+    ridx = 2 if len(fl91nc) >= 3 else max(0, len(fl91nc) - 1)
+    row = fl91nc.iloc[ridx]
+    p1, T1, rho1, a1 = float(row[2]), float(row[1]), float(row[3]), float(row[8])
+    return p1, T1, rho1, a1
+
+
 class TurbineExpander1D:
     """
     透平膨胀机一维设计与热力计算类 (Python 移植版)
@@ -324,15 +358,27 @@ class TurbineExpander1D:
         _FLUID_DF_CACHE[abs_path] = (mtime, df)
         return df, config
 
-    def calculate(self, p0, T0, p3, mv, fluid='CH4', ns=0.575):
+    def calculate(
+        self,
+        p0,
+        T0,
+        p3,
+        mv,
+        fluid="CH4",
+        ns=0.575,
+        cm3_rand: Optional[float] = None,
+        rng: Optional[Any] = None,
+    ):
         """
-        计算主函数
+        计算主函数（与 models/TE_1D/turbExpander_1D.m 对齐）
         :param p0: 进口压力 (Pa)
         :param T0: 进口温度 (K)
         :param p3: 出口压力 (Pa)
-        :param mv: 体积流量 (Nm3/s)
+        :param mv: 体积流量 (Nm3/s; 与 M 中 mv 经 /3600 得质量流一致)
         :param fluid: 工质名称
         :param ns: 比转速
+        :param cm3_rand: 若给定 [0,1)，用于 cm3=c1*(0.4-cm3_rand*0.05)，与 M 的 rand(1) 可逐次对齐
+        :param rng: 未传 cm3_rand 时用 rng.random()；否则用 ``numpy.random.random()``
         :return: dict 包含各项指标
         """
         # 增加压力校验：如果不是膨胀工况，返回模拟/错误提示数据
@@ -423,25 +469,26 @@ class TurbineExpander1D:
             # 预估线速度
             cest = c1 * (np.sin(np.radians(85)) / np.sin(np.radians(80)))
             
-            # 喷嘴出口状态
+            # 喷嘴出口状态：M L283-304 为 mink(1000)+mink(6) 后取第 3 行，不用 (H,S) 全域 griddata
             h1s = h0 - dhsstaa
-            h1s_margin = max(abs(h1s) * 0.2, 500.0)
-            s_m_h = max(abs(s0) * 0.15, 30.0)
-            mhs = (df[4] > h1s - h1s_margin) & (df[4] < h1s + h1s_margin) & (
-                (df[5] > s0 - s_m_h) & (df[5] < s0 + s_m_h)
-            )
-            df_h1s = df[mhs]
-            if len(df_h1s) < 10:
-                df_h1s = df[(df[4] - h1s).abs() < 5 * h1s_margin]
-            if len(df_h1s) < 10:
-                df_h1s = df
-            if len(df_h1s) > 80000:
-                df_h1s = _cap_nd_points(df_h1s)
-
-            p1 = _griddata_hs(df_h1s, h1s, s0, 2)
-            T1 = _griddata_hs(df_h1s, h1s, s0, 1)
-            rho1 = _griddata_hs(df_h1s, h1s, s0, 3)
-            a1 = _griddata_hs(df_h1s, h1s, s0, 8)
+            p1, T1, rho1, a1 = _nozzle_state_matlab_mink(df, h1s, s0)
+            if not all(np.isfinite(x) for x in (p1, T1, rho1, a1)) or a1 <= 0 or rho1 <= 0:
+                h1s_margin = max(abs(h1s) * 0.2, 500.0)
+                s_m_h = max(abs(s0) * 0.15, 30.0)
+                mhs = (df[4] > h1s - h1s_margin) & (df[4] < h1s + h1s_margin) & (
+                    (df[5] > s0 - s_m_h) & (df[5] < s0 + s_m_h)
+                )
+                df_h1s = df[mhs]
+                if len(df_h1s) < 10:
+                    df_h1s = df[(df[4] - h1s).abs() < 5 * h1s_margin]
+                if len(df_h1s) < 10:
+                    df_h1s = df
+                if len(df_h1s) > 80000:
+                    df_h1s = _cap_nd_points(df_h1s)
+                p1 = _griddata_hs(df_h1s, h1s, s0, 2)
+                T1 = _griddata_hs(df_h1s, h1s, s0, 1)
+                rho1 = _griddata_hs(df_h1s, h1s, s0, 3)
+                a1 = _griddata_hs(df_h1s, h1s, s0, 8)
 
             if not all(np.isfinite(x) for x in (p1, T1, rho1, a1)) or a1 <= 0 or rho1 <= 0:
                 return self._get_mock_result("物性插值结果无效(喷嘴区)")
@@ -449,21 +496,41 @@ class TurbineExpander1D:
             # 压缩因子与马赫数
             Mayg = c1 / a1 # 喷嘴马赫数
             
-            # 轮径与转速
+            # 轮径与转速（M L317-318: D1 用 3.14159；nnnr 用 3.14159，不用 numpy.pi）
             omega2 = c1 * (np.sin(np.radians(15)) / np.sin(np.radians(80)))
-            D1 = np.sqrt(m_flow / (np.pi * 0.05 * omega2 * np.sin(np.radians(80)) * rho1 * 0.965))
-            nnnr = cest * 60 / (D1 / 2) / 2 / np.pi
-            
-            # --- 4. 效率与评价 ---
+            D1 = np.sqrt(
+                m_flow
+                / (
+                    MATLAB_PI_D1
+                    * 0.05
+                    * omega2
+                    * np.sin(np.radians(80))
+                    * rho1
+                    * 0.965
+                )
+            )
+            nnnr = cest * 60.0 / (D1 / 2.0) / 2.0 / MATLAB_PI_NNNR
+
+            # --- 4. 效率与评价（与 models/TE_1D/turbExpander_1D.m §「实际效率计算」一致）---
+            # M L272: P = m*dhs*0.85；L388-389: dhu = P/m, uuu = nnnr*2*3.14/60*D1/2（**3.14** 非 pi）
+            # L391: cm3 = c1*(0.4-rand(1)*0.05)
             dhu = power / m_flow
-            uuu = nnnr * 2 * np.pi / 60 * D1 / 2
+            uuu = nnnr * 2.0 * MATLAB_PI_UUU / 60.0 * D1 / 2.0
             psii = dhu / (uuu**2)
-            
-            cm3 = c1 * (0.4 - 0.5 * 0.05) 
+
+            if cm3_rand is not None:
+                r = float(cm3_rand) % 1.0
+            elif rng is not None:
+                r = float(rng.random())
+            else:
+                r = float(np.random.random())
+            cm3 = c1 * (0.4 - r * 0.05)
             phi = cm3 / uuu
             xxx = phi - 0.24
             yyy = psii - 0.94
             yts = (xxx**2 / 0.045**2) + (yyy**2 / 0.04**2)
+            # eta 不是物性表里的等熵效率，而是「速度比 φ、ψ 离设计点 (0.24, 0.94) 」的经验椭圆罚函数
+            # 在多种工质/物性下，可凑出相同 (phi,psii) 乃至相同 yts，故 η 数字不变是模型特性，非 Aspen 等熵效率
             eta = 0.9 - 0.025 * np.sqrt(max(0.0, yts))
             if not np.isfinite(eta) or uuu <= 0 or not np.isfinite(uuu) or D1 <= 0 or not np.isfinite(D1):
                 return self._get_mock_result("透平一维评价量非数(轮径/转速)")
