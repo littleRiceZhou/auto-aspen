@@ -13,6 +13,7 @@ from typing import Dict, Any, Optional, List, Literal
 import traceback
 import os
 import getpass
+import math
 
 try:
     from dotenv import load_dotenv
@@ -257,7 +258,7 @@ def _te_isentropic_efficiency_percent(request: SimulationRequest) -> Optional[fl
             fluid=fluid,
         )
         eta = float(te_res["efficiency"])
-        if 0 < eta <= 1.0:
+        if math.isfinite(eta) and 0 < eta <= 1.0:
             pct = eta * 100.0
             logger.info(f"透平一维设计效率联动 Aspen 等熵效率: {eta:.4f} -> {pct:.4f}%")
             return pct
